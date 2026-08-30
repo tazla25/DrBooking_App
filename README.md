@@ -75,6 +75,9 @@ Verify: `curl http://localhost:3000/` → `{"ok":true,"data":{"service":"dr-book
 | --- | --- | --- |
 | `DATABASE_URL` | `file:../db/custom.db` (relative to `api/prisma/`) | SQLite (dev) / Postgres URL (prod) |
 | `DEFAULT_COUNTRY_CODE` | `91` | Dial code used to normalize 10-digit phone numbers |
+| `RATE_LIMIT_*` | see `api/.env.example` | Override login/register/booking rate limits; `RATE_LIMIT_DISABLED=1` disables |
+| `EXPO_ACCESS_TOKEN` / `FIREBASE_SERVER_KEY` | — | Push credentials (Expo works without a token; FCM is skipped without a key) |
+| `PUSH_DISABLED` | `0` | `1` disables all push sends (auto-disabled in test) |
 
 No secrets live in client code — all keys are server-side only.
 
@@ -92,21 +95,24 @@ No secrets live in client code — all keys are server-side only.
 
 **Status codes:** 200 / 201 success · 401 unauthenticated or bad credentials ·
 403 wrong role / not verified · 404 missing · 409 conflict (e.g. `PHONE_EXISTS`) ·
-422 validation (zod) or malformed JSON · 429 login lockout · 500 internal.
+422 validation (zod) or malformed JSON · 429 login lockout or rate-limited · 500 internal.
 
 **Auth:** `Authorization: Bearer <token>` — the token is returned once by
 `POST /api/auth/login` and expires after 30 days.
 
-### Phase 1 endpoints
+### Endpoint summary (Phases 1–4)
 
-| Method | Path | Auth | Description |
-| --- | --- | --- | --- |
-| GET | `/` | — | Service status (JSON) |
-| POST | `/api/auth/register` | — | PATIENT/DOCTOR self-signup. DOCTOR starts `PENDING`. 409 if phone exists. Audited. |
-| POST | `/api/auth/login` | — | Phone + password → bearer token. 5 failures/15 min → 429 lockout. |
-| POST | `/api/auth/logout` | Bearer | Revokes the current session. |
-| GET | `/api/auth/me` | Bearer | Current user (safe fields + doctor profile when linked). |
-| POST | `/api/auth/change-password` | Bearer | Change password; clears `mustChangePassword`, revokes other sessions. |
+Full request/response documentation lives in `api/README.md`. Summary:
+
+| Phase | Area | Endpoints |
+| --- | --- | --- |
+| 1 (#1–5) | Auth | `POST /api/auth/register` · `login` · `logout` · `GET /api/auth/me` · `POST /api/auth/change-password` |
+| 2 (#13–25) | Doctor/Compounder panel | `GET /api/queue/today` · `POST /api/queue/next` · `POST /api/appointments/walk-in` · `POST /api/appointments/:id/status` · schedule CRUD + overrides · `GET /api/patients` + notes · compounder provisioning · `PATCH /api/availability` |
+| 3 (#6–12, 32–33) | Patient + public | `GET /api/doctors` (+`/:id`) · `GET /api/schedules/:id/availability` · `POST /api/appointments` · `GET /api/appointments/mine` · `POST /api/appointments/:id/cancel` · `GET /api/queue/:scheduleId/:date` · `POST /api/feedback` · `POST /api/devices` |
+| 4 (#26–31) | Admin + analytics + hardening | `GET /api/admin/pending-doctors` · `POST /api/admin/verify-doctor` · `GET /api/admin/audit-log` · `GET /api/analytics/summary` · `GET /api/analytics/revenue` · `GET /api/export/appointments` (CSV, formula-injection-safe) · rate limiting · security headers · 404 catch-all · push service |
+
+Smoke test (every contract #1–33 against the seeded dev DB):
+`bash api/tests/smoke.sh` (API on `:3000`, re-runnable, exits non-zero on failure).
 
 ## Engineering rules (non-negotiable)
 
@@ -160,7 +166,8 @@ allowed string values live in `api/prisma/schema.prisma`.
 
 ## Roadmap
 
-- **Phase 2 (next):** doctor verification (SUPER_ADMIN), schedule CRUD with
-  overrides, appointment booking with queue numbers + transactions, doctor dashboards.
-- **Phase 3:** patient search/notes, feedback endpoints, notifications (DeviceToken).
-- **Phase 4:** mobile app (Expo), Postgres/Supabase migration, deployment.
+- **Done — Phase 1 (auth), Phase 2 (doctor/compounder panel), Phase 3 (patient
+  booking + public queue), Phase 4 (admin verification, analytics, CSV export,
+  push service, rate limiting, security headers, smoke tests).**
+- **Next — Phase 5+:** Expo mobile app (screens + push registration),
+  Postgres/Supabase migration of the runtime DATABASE_URL, deployment.

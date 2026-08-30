@@ -1,6 +1,7 @@
 import { handle, ok, readJsonBody, conflict, notFound } from '@/lib/errors';
 import { requireVerifiedStaffScope } from '@/lib/rbac';
 import { appointmentStatusSchema } from '@/lib/validation';
+import { notifyUser } from '@/lib/push';
 import { db } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
@@ -21,6 +22,10 @@ const ALLOWED_TRANSITIONS: Record<string, readonly string[]> = {
  * POST /api/appointments/:id/status  (#18) — staff status machine.
  * Appointment must belong to the caller's scope (else 404). Audits
  * CANCELLED and NO_SHOW only (staff decisions).
+ *
+ * Push trigger (c) — AFTER the update commits, fire-and-forget: when staff
+ * set CANCELLED, the patient is notified. Walk-ins without an account skip
+ * silently; push failures never affect the status change.
  */
 export const POST = handle(async (request: Request, context: RouteContext): Promise<Response> => {
   const { user, doctorId } = await requireVerifiedStaffScope(request);
@@ -52,6 +57,18 @@ export const POST = handle(async (request: Request, context: RouteContext): Prom
         action: `APPOINTMENT_${body.status}`,
         target: `appointment:${id}`,
         detail: JSON.stringify({ previousStatus: appointment.status, newStatus: body.status }),
+      },
+    });
+  }
+
+  // Push trigger (c) — AFTER the update commits, fire-and-forget.
+  if (body.status === 'CANCELLED') {
+    notifyUser(appointment.patientId, {
+      title: 'Appointment cancelled',
+      body: 'Your appointment has been cancelled by the clinic',
+      data: {
+        type: 'APPOINTMENT_CANCELLED',
+        appointmentId: appointment.id,
       },
     });
   }
