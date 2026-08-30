@@ -193,6 +193,8 @@ allowed string values live in `api/prisma/schema.prisma`.
   (patient booking flow: availability, booking, my-appointments, live queue,
   feedback), Phase 7 (mobile staff console: Today queue + walk-ins + status
   machine, patient book + team notes, schedules + overrides, compounder
-  management, availability toggle).**
-- **Next — Phase 8+:** admin console (Phase 8), EAS production builds
-  (Phase 9), Postgres/Supabase migration.
+  management, availability toggle), Phase 8 (mobile SUPER_ADMIN console:
+  verification queue, analytics + revenue chart, audit trail, CSV export,
+  push deep-links + notification settings, audit polish).**
+- **Next — Phase 9+:** EAS production builds (real-device push verification),
+  Postgres/Supabase migration.

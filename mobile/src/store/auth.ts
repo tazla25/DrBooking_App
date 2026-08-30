@@ -1,6 +1,7 @@
 import type { Href } from 'expo-router';
 import { create } from 'zustand';
 import { apiRequest } from '@/lib/api';
+import { registerPushToken } from '@/lib/push';
 import { clearSession, loadSession, saveSession, updateUser as persistUser } from '@/lib/session';
 import type { LoginResponse, MeResponse, RegisterResponse, SafeUser } from '@/lib/types';
 
@@ -28,6 +29,10 @@ interface AuthState {
   logout: () => Promise<void>;
 }
 
+/** Best-effort push registration fires once per app run (B2) — flag guards
+ * against hydrate somehow being called twice. */
+let pushRegistrationKicked = false;
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   status: 'hydrating',
   token: null,
@@ -37,6 +42,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const session = await loadSession().catch(() => null);
     if (session) {
       set({ status: 'authenticated', token: session.token, user: session.user });
+      // Push registration (B2): kicked at boot for ANY restored session, so
+      // reinstalls and refreshed tokens register without a new login. Never
+      // blocks hydration — registerPushToken swallows every failure.
+      if (!pushRegistrationKicked) {
+        pushRegistrationKicked = true;
+        void registerPushToken();
+      }
       // Refresh the profile in the background (verification status may have
       // changed since the token was issued). Failure keeps the cached user.
       try {

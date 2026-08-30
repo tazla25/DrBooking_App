@@ -2,6 +2,8 @@
  * these functions only PRETTIFY for display; they never convert or do
  * timezone math. */
 
+import { istDateOfISO, istTimeOfISO } from './time';
+
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -51,4 +53,14 @@ export function formatDayMonth(dateISO: string): string {
   const parts = full.split(' ');
   if (parts.length !== 3) return dateISO;
   return `${parts[0]} ${parts[1]}`;
+}
+
+/**
+ * UTC ISO-8601 timestamp → '30 Aug 2026 · 14:35 IST'. Uses the IST calendar
+ * date (never `ts.slice(0, 10)`, which is UTC and off-by-one after 18:30 IST).
+ */
+export function formatISTTimestamp(timestamp: string): string {
+  const date = formatDateISO(istDateOfISO(timestamp));
+  const time = istTimeOfISO(timestamp);
+  return time ? `${date} · ${time} IST` : date;
 }

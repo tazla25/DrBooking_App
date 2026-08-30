@@ -14,3 +14,4 @@ export { GlassModal } from './GlassModal';
 export { StarRating } from './StarRating';
 export { GlassToast, useToast, type ToastState } from './GlassToast';
 export { EmptyState } from './EmptyState';
+export { NotificationsCard } from './NotificationsCard';

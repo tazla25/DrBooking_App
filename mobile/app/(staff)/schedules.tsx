@@ -36,6 +36,7 @@ import {
 } from '@/lib/staff';
 import { istTodayISO, nextDates } from '@/lib/time';
 import {
+  overrideTypeSelected,
   validateOverrideForm,
   validateScheduleForm,
   type OverrideFormErrors,
@@ -714,7 +715,7 @@ function OverridesModal({
                 <Pressable
                   key={type}
                   accessibilityRole="button"
-                  onPress={() => setForm((f) => ({ ...f, type }))}
+                  onPress={() => setForm((f) => overrideTypeSelected(f, type))}
                   style={[
                     styles.typeChip,
                     selected && {

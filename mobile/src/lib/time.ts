@@ -21,9 +21,36 @@ const istDateFormatter = new Intl.DateTimeFormat('en-CA', {
   day: '2-digit',
 });
 
+/** HH:mm for an instant, formatted in IST (24h). */
+const istTimeFormatter = new Intl.DateTimeFormat('en-GB', {
+  timeZone: IST_TIME_ZONE,
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+});
+
 /** Today's business date in IST as 'YYYY-MM-DD'. The ONLY way to get "today". */
 export function istTodayISO(): string {
   return istDateFormatter.format(new Date());
+}
+
+/**
+ * IST calendar date ('YYYY-MM-DD') of a UTC ISO-8601 timestamp (e.g. a
+ * `createdAt` from the API). The safe replacement for `ts.slice(0, 10)`,
+ * which is the UTC date and therefore off-by-one after 18:30 IST.
+ * Unparseable input falls back to the first 10 characters verbatim.
+ */
+export function istDateOfISO(timestamp: string): string {
+  const instant = new Date(timestamp);
+  if (Number.isNaN(instant.getTime())) return timestamp.slice(0, 10);
+  return istDateFormatter.format(instant);
+}
+
+/** IST clock time ('HH:mm') of a UTC ISO-8601 timestamp; null when unparseable. */
+export function istTimeOfISO(timestamp: string): string | null {
+  const instant = new Date(timestamp);
+  if (Number.isNaN(instant.getTime())) return null;
+  return istTimeFormatter.format(instant);
 }
 
 /** Day of week (0 = Sunday … 6 = Saturday) of an IST 'YYYY-MM-DD' date. */

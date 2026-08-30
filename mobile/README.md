@@ -64,18 +64,23 @@ mobile/
 │   │   ├── patient/[phone].tsx  # shared team notes for one phone
 │   │   ├── schedules.tsx    # schedule CRUD + day overrides
 │   │   ├── team.tsx         # compounder management (DOCTOR only)
-│   │   └── profile.tsx      # identity · change password · sign out
-│   ├── (admin)/             # SUPER_ADMIN placeholder ("Phase 8")
+│   │   └── profile.tsx      # identity · notifications · change password · sign out
+│   ├── (admin)/             # SUPER_ADMIN console (Phase 8 — tabbed)
+│   │   ├── _layout.tsx      # role-guarded Tabs (PATIENT → /(tabs), staff → /(staff))
+│   │   ├── index.tsx        # Verification: pending-doctor queue, approve/reject
+│   │   ├── analytics.tsx    # doctor picker · metric tiles · revenue chart · CSV export
+│   │   ├── audit.tsx        # append-only audit trail + action/actor filters
+│   │   └── profile.tsx      # identity · notifications · change password · sign out
 │   ├── doctor/[id].tsx      # public doctor detail (Book → /book/[doctorId])
 │   ├── book/[doctorId].tsx  # Phase 6: schedule + date + availability + confirm
 │   ├── booking-success.tsx  # Phase 6: token confirmation screen
 │   └── queue/[scheduleId]/[date].tsx  # Phase 6: masked live queue (15s poll)
 ├── src/
 │   ├── theme/               # design tokens (colors, spacing, radii, typography)
-│   ├── components/          # Glass kit (+ GlassModal, StarRating, GlassToast, EmptyState)
-│   ├── lib/                 # api · session · errors · appointments · staff · time (IST) · push · validation
-│   ├── store/               # zustand auth store
-│   └── hooks/               # useDebouncedValue · useAppointments · useAvailability · useLiveQueue · useTodayQueue · usePatients · useSchedules
+│   ├── components/          # Glass kit (+ GlassModal, StarRating, GlassToast, EmptyState, NotificationsCard)
+│   ├── lib/                 # api · session · errors · appointments · staff · admin · time (IST) · push · validation
+│   ├── store/               # zustand auth store (+ boot push registration)
+│   └── hooks/               # useDebouncedValue · useAppointments · useAvailability · useLiveQueue · useTodayQueue · usePatients · useSchedules · usePendingDoctors · useAuditLog · useAdminAnalytics · usePushDeepLinks
 └── jest.config.js           # jest-expo preset, global secure-store/router mocks
 ```
 
@@ -88,6 +93,14 @@ mobile/
   hydrated on boot behind the splash gate.
 - **Scoping law**: the client never sends a `doctorId` for staff roles — the
   server scope wins. A 404 for someone else's resource is by design.
+  **SUPER_ADMIN is the exception**: analytics + CSV-export routes REQUIRE
+  `?doctorId=<DoctorProfile.id>` from the admin (missing/unknown → 422) — the
+  Analytics tab's doctor picker always supplies it.
+- **CSV export bypasses the api client BY DESIGN**: `GET /api/export/appointments`
+  streams a `text/csv` attachment, not the envelope. `src/lib/admin.ts` uses
+  raw `fetch` with the bearer token and branches on content-type
+  (`application/json` → envelope error, `text/csv` → cache file + share sheet).
+  The UTF-8 BOM and formula-escaped phones are intentional — do not "fix".
 - **Staff queue rows show FULL patient name + phone** — by design (staff-only
   screen; masking exists only on the public patient queue).
 - **Phone path params are `encodeURIComponent`-ed** (`/api/patients/:phone/notes`
@@ -229,9 +242,66 @@ screen before any staff tab is reachable).
    to `/(staff)/patients` → redirected to the patient tabs (the API remains
    the real gate).
 
-## Known limitations (Phase 7)
+## Manual test walkthrough (Phase 8 — admin console + push)
 
-- Admin area (SUPER_ADMIN) is still a placeholder (Phase 8).
+Start the API + app as in _Getting started_ (fresh-seeded DB), then sign in
+as **SUPER_ADMIN `+919999000001` / `Test@1234`**. You land on the admin
+console — four tabs: Verification · Analytics · Audit · Profile.
+
+1. **Verification queue** — the tab header shows "1 pending application".
+   The card lists Dr. Kavita Rao (`+919876543299`, Pediatrician, the seeded
+   PENDING doctor) with fee, years of experience, bio and the IST applied
+   date. A doctor account without a profile renders a "No profile yet"
+   state instead of the facts block.
+2. **Reject flow** — tap _Reject_ → optional note (max 500 chars) →
+   confirm. The queue refetches (row dropped) and a toast confirms
+   "Dr. Kavita Rao rejected". Re-open the queue via pull-to-refresh.
+3. **Approve flow** — re-register the pending doctor (or re-seed), then
+   _Approve_ → toast "Dr. Kavita Rao verified"; she now appears in the
+   public Find Doctors list for patients. An approval racing another admin
+   surfaces 409 INVALID_TRANSITION → the queue refetches with an info toast.
+4. **Audit tab** — the trail shows the DOCTOR_REJECTED / DOCTOR_VERIFIED
+   rows from steps 2–3 (newest first, IST timestamps). Filter chips narrow
+   to one of the four known actions; the actor-id field filters by exact
+   actorId. `actor: null` (deleted user) renders "Unknown actor"; `detail`
+   is parsed defensively — non-JSON shows the raw string, long details
+   collapse behind More/Less.
+5. **Analytics tab** — the doctor picker defaults to the first VERIFIED
+   doctor (public route — PENDING doctors are invisible here by design).
+   Window chips (Today / Last 7d / Last 30d) swap the 6 metric tiles
+   (revenue highlighted). Days chips 7/30/90 refetch the revenue bar chart
+   (plain Views, height ∝ revenue, sparse labels, horizontal scroll for 90d).
+6. **CSV export** — _Export CSV_ → defaults to = IST today, from = today−30
+   (editable, from ≤ to enforced client-side) → _Download & share_ saves to
+   the app cache and opens the OS share sheet (`text/csv`). The file starts
+   with a UTF-8 BOM and formula-escaped phones — intentional. Errors stay in
+   the modal with the friendly message.
+7. **Role guard** — sign in as patient `+919812345601` and deep-link to
+   `/(admin)/analytics` → redirected to the patient tabs; as doctor
+   `+919876543210` → redirected to `/(staff)`. (The API 403s non-admin
+   callers regardless.)
+8. **Notifications row** — Profile → _Notifications_ card shows the OS
+   permission state (Granted/Denied/Unknown) for every role; tapping it
+   re-runs registration and toasts the result (denied → "enable in device
+   settings" hint). NOTE: on Expo Go / emulator the Expo token call fails
+   by design until the EAS projectId exists (Phase 9) — the state still
+   reflects the real OS permission.
+9. **Push deep-links** (requires a real device build, Phase 9) — a
+   BOOKING_CONFIRMED / QUEUE_POSITION / APPOINTMENT_CANCELLED tap opens the
+   patient Appointments tab; unknown payload types are ignored. Unit tests
+   cover the mapper, role guards and double-fire dedupe meanwhile.
+
+## Known limitations (Phase 8)
+
+- **Push on-device E2E is deferred to Phase 9**: Expo Go on Android (SDK 53+)
+  does not deliver remote push, and `getExpoPushTokenAsync` needs the EAS
+  `projectId` (`eas init` lands in Phase 9) — until then registration throws
+  internally and is swallowed BY DESIGN. The handler/channel, registration
+  call site, deep-link mapping, guards and dedupe are all unit-tested; the
+  server→Expo path is covered by the frozen `api/tests/push*.test.ts`.
+- **Analytics revenue chart is plain Views** (no chart library — dependency
+  freeze): tap-free bars, no crosshair; values surface via the peak-day
+  caption + accessibility labels per bar.
 - Availability switch state comes from the PUBLIC doctor detail
   (`GET /api/doctors/:id` — the only place `isAvailableNow` is exposed); for a
   PENDING doctor the switch is hidden (their staff endpoints 403 with the

@@ -17,6 +17,7 @@ import {
 } from '@/components';
 import { toFriendlyMessage } from '@/lib/errors';
 import { formatDateISO } from '@/lib/format';
+import { istDateOfISO } from '@/lib/time';
 import { addPatientNote, fetchPatientNotes, type PatientNote } from '@/lib/staff';
 import { validateNoteForm } from '@/lib/validation';
 import { colors, radii, spacing, typography } from '@/theme';
@@ -25,13 +26,15 @@ import { colors, radii, spacing, typography } from '@/theme';
  * Patient notes (staff-only, shared within the doctor's team — keyed by
  * phone so walk-ins without accounts work too). Newest first, author
  * name + role chip, important notes starred. Add-note form posts and
- * prepends to the list. The phone arrives as an encoded URL segment and is
- * decoded here (phones contain '+').
+ * prepends to the list.
+ *
+ * C2: expo-router ALREADY decodes route params — never decodeURIComponent
+ * again here (a patient name containing '%' would throw URIError).
  */
 export default function PatientNotesScreen() {
   const params = useLocalSearchParams<{ phone: string; name?: string }>();
-  const phone = decodeURIComponent(params.phone ?? '');
-  const patientName = params.name ? decodeURIComponent(params.name) : null;
+  const phone = params.phone ?? '';
+  const patientName = params.name ?? null;
   const { toast, show } = useToast();
 
   const [notes, setNotes] = useState<PatientNote[] | null>(null);
@@ -198,7 +201,7 @@ function NoteRow({ note }: { note: PatientNote }) {
             <Text style={styles.importantChipText}>IMPORTANT</Text>
           </View>
         ) : null}
-        <Text style={styles.date}>{formatDateISO(note.createdAt.slice(0, 10))}</Text>
+        <Text style={styles.date}>{formatDateISO(istDateOfISO(note.createdAt))}</Text>
       </View>
       <Text style={styles.noteText}>{note.note}</Text>
       {note.author ? (

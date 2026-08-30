@@ -184,3 +184,54 @@ export function validateNoteForm(note: string): string | null {
   if (trimmed.length > 2000) return 'Note is too long (max 2000 characters)';
   return null;
 }
+
+// -- Phase 7 POLISH (audit C1): override type selection ------------------------
+
+/**
+ * Selecting an override type in the add-form. Selecting CLOSED CLEARS the
+ * time fields (a hidden-field "CLOSED cannot carry times" error otherwise
+ * dead-ends the form when stale times linger from an earlier type choice).
+ */
+export function overrideTypeSelected(
+  form: OverrideFormValues,
+  type: OverrideTypeValue,
+): OverrideFormValues {
+  if (type === 'CLOSED') {
+    return { ...form, type, newStartTime: '', newEndTime: '' };
+  }
+  return { ...form, type };
+}
+
+// -- Phase 8: admin console mirrors (api/src/lib/validation.ts) -----------------
+
+/** Rejection note — max 500 chars after trim (mirror of verifyDoctorSchema.note). */
+export function validateVerificationNote(note: string): string | null {
+  if (note.trim().length > 500) return 'Note is too long (max 500 characters)';
+  return null;
+}
+
+export interface ExportRangeErrors {
+  from?: string;
+  to?: string;
+}
+
+/**
+ * CSV export range — strict 'YYYY-MM-DD' IST business dates with from <= to
+ * (mirrors exportQuerySchema + the route's "from must be on or before to"
+ * 422; the client blocks it before a request is ever sent).
+ */
+export function validateExportRange(from: string, to: string): ExportRangeErrors {
+  const errors: ExportRangeErrors = {};
+  if (!isValidDateStr(from)) errors.from = 'Use a valid date (YYYY-MM-DD)';
+  if (!isValidDateStr(to)) errors.to = 'Use a valid date (YYYY-MM-DD)';
+  if (!errors.from && !errors.to && from > to) {
+    errors.from = 'From must be on or before To';
+  }
+  return errors;
+}
+
+/** Audit actor filter (optional exact actorId text field). */
+export function normalizeAuditUserIdFilter(raw: string): string | undefined {
+  const trimmed = raw.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
