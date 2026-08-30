@@ -1,27 +1,23 @@
-import { Prisma } from '@prisma/client';
 import { handle, ok, readJsonBody, conflict, notFound, validationError } from '@/lib/errors';
 import { requireVerifiedStaffScope } from '@/lib/rbac';
 import { walkInSchema } from '@/lib/validation';
 import { dayOfWeekIST, istTodayISO } from '@/lib/time';
+import { bookInQueue, runBookingTransaction } from '@/lib/booking';
 import { db } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
-/** Retry a transaction on unique-violation / write-conflict races. */
-const RETRYABLE_PRISMA_CODES = new Set(['P2002', 'P2034']);
-const MAX_ATTEMPTS = 3;
-
 /**
  * POST /api/appointments/walk-in  (#17) — staff books a patient without the app.
  *
- * One transaction (retried up to 3 attempts on queue-number unique races):
+ * The queue-insert itself lives in src/lib/booking.ts (bookInQueue) — the SAME
+ * core the patient booking route uses (Phase 3 #8). Around it:
  *  - schedule must belong to the caller's scope (else 404 — never reveal
  *    another doctor's resources) and be active;
  *  - date must be today-or-future (IST) and match schedule.dayOfWeek;
- *  - no CLOSED override for (scheduleId, date) → 409 SCHEDULE_CLOSED;
- *  - duplicate guard INSIDE the transaction: same phone + schedule + date
- *    with status CONFIRMED/CALLED → 409 ALREADY_IN_QUEUE (v1 bug #4);
- *  - queueNumber = max(scheduleId+date) + 1;
+ *  - duplicate guard (same phone + schedule + date, CONFIRMED/CALLED) and the
+ *    CLOSED-override check run inside the transaction via bookInQueue;
+ *  - queueNumber = max(scheduleId+date) + 1 with P2002/P2034 retries;
  *  - fee defaults to the doctor's DoctorProfile.fee.
  */
 export const POST = handle(async (request: Request): Promise<Response> => {
@@ -48,71 +44,22 @@ export const POST = handle(async (request: Request): Promise<Response> => {
     throw validationError('The schedule does not operate on this day of the week');
   }
 
-  const closedOverride = await db.scheduleOverride.findUnique({
-    where: { scheduleId_date: { scheduleId: schedule.id, date: body.date } },
-    select: { id: true, type: true },
-  });
-  if (closedOverride?.type === 'CLOSED') {
-    throw conflict('SCHEDULE_CLOSED', 'The clinic is closed on this date');
-  }
-
-  const createWalkIn = () =>
-    db.$transaction(async (tx) => {
-      // Duplicate guard INSIDE the transaction (v1 bug #4 fix).
-      const duplicate = await tx.appointment.findFirst({
-        where: {
-          scheduleId: schedule.id,
-          date: body.date,
-          patientPhone: body.patientPhone,
-          status: { in: ['CONFIRMED', 'CALLED'] },
-        },
-        select: { id: true },
-      });
-      if (duplicate) {
-        throw conflict('ALREADY_IN_QUEUE', 'This patient is already in the queue for this schedule');
-      }
-
-      const last = await tx.appointment.findFirst({
-        where: { scheduleId: schedule.id, date: body.date },
-        orderBy: { queueNumber: 'desc' },
-        select: { queueNumber: true },
-      });
-      const queueNumber = (last?.queueNumber ?? 0) + 1;
-
-      return tx.appointment.create({
-        data: {
-          scheduleId: schedule.id,
-          doctorId: schedule.doctorId, // trusted server-side, never from the body
-          patientId: null,
-          patientName: body.patientName,
-          patientPhone: body.patientPhone,
-          date: body.date,
-          queueNumber,
-          status: 'CONFIRMED',
-          source: 'WALK_IN',
-          fee: body.fee ?? schedule.doctor.fee,
-          notes: body.notes ?? null,
-        },
-      });
-    });
-
-  let appointment: Awaited<ReturnType<typeof createWalkIn>> | undefined;
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
-    try {
-      appointment = await createWalkIn();
-      lastError = undefined;
-      break;
-    } catch (err) {
-      lastError = err;
-      const retryable =
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        RETRYABLE_PRISMA_CODES.has(err.code) &&
-        attempt < MAX_ATTEMPTS;
-      if (!retryable) throw err;
-    }
-  }
-  if (!appointment) throw lastError ?? new Error('walk-in transaction failed');
+  const appointment = await runBookingTransaction((tx) =>
+    bookInQueue(tx, {
+      scheduleId: schedule.id,
+      date: body.date,
+      patientId: null,
+      patientName: body.patientName,
+      patientPhone: body.patientPhone,
+      source: 'WALK_IN',
+      fee: body.fee ?? schedule.doctor.fee,
+      notes: body.notes ?? null,
+      duplicate: {
+        code: 'ALREADY_IN_QUEUE',
+        message: 'This patient is already in the queue for this schedule',
+      },
+    }),
+  );
 
   await db.auditLog.create({
     data: {
