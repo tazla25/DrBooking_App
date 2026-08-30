@@ -8,7 +8,12 @@ const STATUS_STYLES: Record<AppointmentStatus, { fg: string; bg: string }> = {
   ...colors.status,
 };
 
-/** Human label for a machine status (e.g. NO_SHOW → "No-show"). */
+/**
+ * Human label for a machine status (e.g. NO_SHOW → "No-show").
+ *
+ * C5: unknown runtime values (statuses the client build has never heard of)
+ * render the RAW value instead of undefined — a chip must never show blank.
+ */
 export function statusLabel(status: AppointmentStatus): string {
   switch (status) {
     case 'CONFIRMED':
@@ -23,6 +28,9 @@ export function statusLabel(status: AppointmentStatus): string {
       return 'No-show';
     case 'PENDING':
       return 'Pending';
+    default:
+      // Runtime safety net — unreachable for the union, live for casts.
+      return String(status);
   }
 }
 

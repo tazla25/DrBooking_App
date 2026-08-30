@@ -1,8 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
-import { Avatar, GlassButton, GlassCard, GlassHeader, GlassScreen, StatusChip } from '@/components';
+import {
+  Avatar,
+  GlassButton,
+  GlassCard,
+  GlassHeader,
+  GlassScreen,
+  NotificationsCard,
+  StatusChip,
+} from '@/components';
 import { formatDateISO } from '@/lib/format';
+import { istDateOfISO } from '@/lib/time';
 import { useAuthStore } from '@/store/auth';
 import { colors, radii, spacing, typography } from '@/theme';
 
@@ -59,11 +68,13 @@ export default function ProfileScreen() {
             <InfoRow
               icon="calendar-outline"
               label="Member since"
-              value={formatDateISO(user.createdAt.slice(0, 10))}
+              value={formatDateISO(istDateOfISO(user.createdAt))}
             />
             <InfoRow icon="id-card-outline" label="Role" value={roleLabel(user.role)} />
           </View>
         </GlassCard>
+
+        <NotificationsCard />
 
         <GlassButton
           label="Sign out"
@@ -81,7 +92,7 @@ export default function ProfileScreen() {
           />
         ) : null}
 
-        <Text style={styles.version}>Dr Booking · Phase 7</Text>
+        <Text style={styles.version}>Dr Booking · Phase 8</Text>
       </View>
     </GlassScreen>
   );

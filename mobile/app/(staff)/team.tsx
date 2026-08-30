@@ -1,7 +1,7 @@
 import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Platform, StyleSheet, Text, View } from 'react-native';
 import {
   Avatar,
   EmptyState,
@@ -18,6 +18,7 @@ import {
 } from '@/components';
 import { toFriendlyMessage } from '@/lib/errors';
 import { formatDateISO } from '@/lib/format';
+import { istDateOfISO } from '@/lib/time';
 import {
   createCompounder,
   deactivateCompounder,
@@ -358,7 +359,9 @@ function CompounderRow({
             <Text style={styles.pendingChipText}>Must change password — never signed in</Text>
           </View>
         ) : null}
-        <Text style={styles.joined}>Joined {formatDateISO(compounder.createdAt.slice(0, 10))}</Text>
+        <Text style={styles.joined}>
+          Joined {formatDateISO(istDateOfISO(compounder.createdAt))}
+        </Text>
       </View>
       {active ? (
         <GlassButton
@@ -438,7 +441,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.text.primary,
     letterSpacing: 1.5,
-    fontFamily: 'Courier', // monospace — large, unambiguous
+    // C3: monospace per platform — 'Courier' is iOS-only; Android renders it
+    // as the default font (falling back via Platform.select keeps the one-time
+    // password unambiguous on both platforms).
+    fontFamily: Platform.select({ ios: 'Courier', android: 'monospace' }),
   },
   tempWarning: { ...typography.caption, color: colors.destructive, textAlign: 'center' },
   confirmRow: {

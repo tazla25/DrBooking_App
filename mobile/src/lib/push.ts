@@ -35,3 +35,48 @@ export async function registerPushToken(): Promise<void> {
     }
   }
 }
+
+// ---------------------------------------------------------------------------
+// Foreground presentation + Android channel (Phase 8, B1)
+// ---------------------------------------------------------------------------
+
+/** Module flag — configurePush() is idempotent within one JS context. */
+let pushConfigured = false;
+
+/**
+ * One-time push setup, called from the root layout on every app start:
+ *  (a) the foreground notification handler — alerts + sound, no badge;
+ *  (b) Android only: a HIGH-importance 'default' channel so heads-up
+ *      notifications render on Android 8+.
+ * Safe to call repeatedly (re-renders, Fast Refresh) — only the first call
+ * installs anything.
+ */
+export function configurePush(): void {
+  if (pushConfigured) return;
+  pushConfigured = true;
+
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+      // SDK 57 additions — banners + list are the iOS 14+/Android 13 default
+      // presentation surfaces for the alert we just opted into.
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+
+  if (Platform.OS === 'android') {
+    void Notifications.setNotificationChannelAsync('default', {
+      name: 'General',
+      importance: Notifications.AndroidImportance.HIGH,
+      sound: 'default',
+    }).catch(() => undefined);
+  }
+}
+
+/** Test seam — resets the idempotence flag (never call from app code). */
+export function __resetPushConfiguredForTests(): void {
+  pushConfigured = false;
+}
