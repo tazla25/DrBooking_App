@@ -24,3 +24,24 @@ Stage Summary:
 - 5 auth endpoints live on :3000. All seeded accounts use password Test@1234.
 - Known decisions: PATIENT registers as VERIFIED immediately (no OTP flow in v2 by design — "no WhatsApp/Telegram code"); DOCTOR registration creates a stub DoctorProfile; change-password keeps the caller's session and revokes others; audit rows written for AUTH_REGISTER and AUTH_PASSWORD_CHANGED (login/logout rely on FailedLogin/Session — full audit coverage deferred to phase 2).
 - Deferred to later phases: doctor verification admin route, schedule/appointment/feedback CRUD endpoints, mobile app, Postgres migration.
+
+---
+Task ID: 2
+Agent: Super Z (main agent)
+Task: Phase 1.5 — go live on GitHub + Supabase compatibility verification.
+
+Work Log:
+- Re-pointed v2/foundation to the Phase 1 line (c6d9dc4 → 7f9b42e → a5abc8d); the branch had been stranded at the initial commit while the Phase 1 commits sat on main. Both branches now share the Phase 1 history.
+- Pre-push secret scan over the full history (`git log -p --all`, scanning for GitHub-token prefixes, DB-password fragments, pooler connection-string markers, and the Supabase project ref) → 198 matches, ALL benign on line-by-line review: code identifiers (passwordHash / passwordSchema / mustChangePassword / changePasswordSchema …), documentation naming Supabase as the prod target, and intentional demo passwords (Test@1234 etc.) in seed/tests/scripts. Targeted probes for the actual secret VALUES (token prefix, project ref, pooler host:port, DB-password fragment) all returned ZERO ⇒ no real secrets in history.
+- Verified via git check-ignore that .env / .env.* (with !.env.example / !api/.env.example exceptions) and every SQLite db path (root /db/*.db, api/db/*.db, api/prisma/*.db) are excluded; hardened .gitignore with global *.db / *.db-journal patterns.
+- Added remote origin https://github.com/tazla25/DrBooking_App.git — PAT (…x8v1) lives ONLY in .git/config (never committed, never printed).
+- Push history: the first PAT (…x8v1) authenticated as tazla25 but had read-only Contents (git push → 403 "Permission to tazla25/DrBooking_App.git denied to tazla25"; API contents-write probe → "Resource not accessible by personal access token"), so the initial push attempt was blocked pending token regeneration. After the owner issued a new token (…8q91T, Contents: Read and write) and it was installed in the remote URL, `git push -u origin main v2/foundation` completed go-live: both branches are now live on GitHub at https://github.com/tazla25/DrBooking_App, with v2/foundation carrying the full history c6d9dc4 → 7f9b42e (Phase 1) → a5abc8d → Phase 1.5 commit.
+- Supabase compatibility (committed schema UNTOUCHED): throwaway copy of prisma/schema.prisma with provider "postgresql" + directUrl env("DIRECT_URL"); ran `prisma db push --skip-generate` with DATABASE_URL=transaction pooler (6543) and DIRECT_URL=session pooler (5432); DDL applied through the session pooler in 4.17s. Verified via information_schema: exactly 11 tables in public — Appointment, AuditLog, DeviceToken, DoctorProfile, FailedLogin, Feedback, PatientNote, Schedule, ScheduleOverride, Session, User. Tables confirmed EMPTY (User 0 rows, Appointment 0 rows) — seed never ran against Supabase per policy (demo accounts have known passwords). Throwaway schema + verification scripts deleted afterwards; git diff on the committed schema is empty.
+- Secrets storage: SUPABASE_TRANSACTION_POOLER_URL + SUPABASE_SESSION_POOLER_URL saved to .env (gitignored) only; variable names documented in api/.env.example with fully generic placeholders (no real host/credentials).
+- Local dev re-verified after all changes: `tsc --noEmit` clean; jest 23/23; committed schema still provider "sqlite".
+
+Stage Summary:
+- Supabase is 100% compatible with the committed schema (11/11 tables, zero schema changes needed) — Phase 1's no-enum / no-String[] / no-Json discipline paid off.
+- GitHub go-live COMPLETE: both branches (main, v2/foundation) pushed to https://github.com/tazla25/DrBooking_App after PAT rotation; v2/foundation contains the Phase 1 commit (7f9b42e) plus Phase 1.5. Supabase prod target verified compatible; local dev remains SQLite with tsc clean and 23/23 jest tests.
+- No secret value has entered git history, commit messages, worklog, README, or command output at any point.
+

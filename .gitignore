@@ -20,7 +20,9 @@ coverage/
 !.env.example
 !api/.env.example
 
-# local databases (SQLite dev/test files)
+# local databases (SQLite dev/test files) — global guard, nothing tracked ever
+*.db
+*.db-journal
 api/db/*.db
 api/db/*.db-journal
 api/prisma/*.db
