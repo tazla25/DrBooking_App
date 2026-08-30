@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet, Text, TouchableOpacity, type ViewStyle } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, type StyleProp, type ViewStyle } from 'react-native';
 import { colors, radii, spacing, typography } from '@/theme';
 
 type Tone = 'default' | 'destructive' | 'accent';
@@ -10,7 +10,7 @@ interface GlassButtonProps {
   icon?: keyof typeof Ionicons.glyphMap;
   tone?: Tone;
   disabled?: boolean;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
 }
 
 const TONE_FG: Record<Tone, string> = {

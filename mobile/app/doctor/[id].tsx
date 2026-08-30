@@ -83,6 +83,7 @@ export default function DoctorDetailScreen() {
 }
 
 function DoctorProfile({ doctor }: { doctor: DoctorDetail }) {
+  const router = useRouter();
   return (
     <View style={styles.body}>
       {/* -- Profile card ------------------------------------------------ */}
@@ -153,15 +154,16 @@ function DoctorProfile({ doctor }: { doctor: DoctorDetail }) {
         </>
       ) : null}
 
-      {/* -- Booking (Phase 6 teaser) --------------------------------------- */}
+      {/* -- Booking (Phase 6) ---------------------------------------------- */}
       <GlassCard padded style={styles.bookingCard}>
         <PrimaryButton
           label="Book appointment"
           icon="calendar"
-          disabled
-          onPress={() => undefined}
+          onPress={() => router.push(`/book/${doctor.id}`)}
         />
-        <Text style={styles.bookingHint}>Booking opens in Phase 6</Text>
+        <Text style={styles.bookingHint}>
+          Pick a clinic and date — see the live token queue before you confirm.
+        </Text>
       </GlassCard>
     </View>
   );

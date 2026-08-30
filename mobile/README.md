@@ -1,9 +1,10 @@
 # Dr_Booking — mobile app
 
 Expo (SDK 57) + expo-router + TypeScript (strict) client for the Dr_Booking REST
-API in `../api`. Phase 5 delivers the foundation: scaffold, the glassmorphism
-pastel design system, session + api client, the auth flow, and the first real
-screen (Find Doctors).
+API in `../api`. Phase 5 delivered the foundation (scaffold, glassmorphism
+pastel design system, session + api client, auth flow, Find Doctors). **Phase 6
+delivers the patient booking flow**: availability + booking, My Appointments
+(upcoming/past), cancel, the masked live queue, and visit feedback.
 
 ## Stack (locked)
 
@@ -30,10 +31,11 @@ EXPO_PUBLIC_API_URL=http://localhost:3000 npx expo start
 
 Scan the QR code with Expo Go (phone on the same Wi-Fi; use your machine's LAN
 IP instead of `localhost` for a physical device). Seeded accounts (password
-`Test@1234`): patient `+919876543201`…`+919876543205`, doctors
+`Test@1234`): **patients `+919812345601`…`+919812345605`**, doctors
 `+919876543210` / `+919876543211` (VERIFIED), `+919876543299` (PENDING),
 compounder `+919876543220` (must-change-password onboarding), admin
-`+919999000001`.
+`+919999000001`. The seed also books a few appointments for TODAY so the
+live queue has traffic, and leaves one COMPLETED visit with feedback.
 
 ## Scripts
 
@@ -54,16 +56,19 @@ mobile/
 │   ├── index.tsx            # boot redirector (login / change-password / role home)
 │   ├── demo.tsx             # DEV-ONLY design-system showcase
 │   ├── (auth)/              # login · register · change-password
-│   ├── (tabs)/              # PATIENT: Find Doctors · Profile
+│   ├── (tabs)/              # PATIENT: Find Doctors · Appointments · Profile
 │   ├── (staff)/             # DOCTOR/COMPOUNDER placeholder ("Phase 7")
 │   ├── (admin)/             # SUPER_ADMIN placeholder ("Phase 8")
-│   └── doctor/[id].tsx      # public doctor detail
+│   ├── doctor/[id].tsx      # public doctor detail (Book → /book/[doctorId])
+│   ├── book/[doctorId].tsx  # Phase 6: schedule + date + availability + confirm
+│   ├── booking-success.tsx  # Phase 6: token confirmation screen
+│   └── queue/[scheduleId]/[date].tsx  # Phase 6: masked live queue (15s poll)
 ├── src/
 │   ├── theme/               # design tokens (colors, spacing, radii, typography)
-│   ├── components/          # Glass kit (screens, cards, fields, buttons, chips…)
-│   ├── lib/                 # api client · session (secure-store) · errors · push · validation
+│   ├── components/          # Glass kit (+ GlassModal, StarRating, GlassToast, EmptyState)
+│   ├── lib/                 # api · session · errors · appointments · time (IST) · push · validation
 │   ├── store/               # zustand auth store
-│   └── hooks/               # useDebouncedValue
+│   └── hooks/               # useDebouncedValue · useAppointments · useAvailability · useLiveQueue
 └── jest.config.js           # jest-expo preset, global secure-store/router mocks
 ```
 
@@ -98,12 +103,57 @@ mobile/
 **Review it in-app:** sign in (dev build) → Profile tab → _Design system demo_
 (or the palette button on Find Doctors) → `app/demo.tsx` renders the whole kit.
 
-## Known limitations (Phase 5)
+## Manual test walkthrough (Phase 6)
 
-- Booking is visible but disabled (`Booking opens in Phase 6`).
+Start the API + app as in _Getting started_, then sign in as patient
+**`+919812345602` / `Test@1234`** (use `.601`–`.604` for parallel-device tests;
+each seeded patient already has TODAY appointments, so lists are non-empty).
+
+1. **Booking flow** — Find Doctors → tap a doctor → _Book appointment_.
+   The screen shows the doctor's active schedules as glass cards (first is
+   auto-selected with its next consulting day) and a 7-day date strip (IST
+   dates; clinic days carry a blue dot). Availability loads per
+   (schedule, date): open days show **next token / est. wait / slots left**;
+   wrong weekdays show the plain-English "does not consult" banner; a CLOSED
+   override shows "clinic is closed". Pick a full day → the CTA becomes
+   _Fully booked_ (disabled). Continue → confirm sheet (doctor, clinic, date,
+   time, fee) → **Confirm booking** → success screen with the big token.
+2. **Duplicate guard** — book the same schedule+date again → the confirm sheet
+   shows _You already have an active booking for this schedule._
+3. **My Appointments** — the middle tab. _Upcoming_ shows token #, doctor,
+   clinic, date, status chip, est. wait. _Past_ (segmented control) shows
+   COMPLETED / CANCELLED / NO_SHOW visits. Pull-to-refresh; scroll to load
+   more (10 per page).
+4. **Cancel flow** — on a CONFIRMED card tap _Cancel_ → glass confirm modal
+   ("Cancel token #N with Dr X?") → _Yes, cancel it_ → the card disappears +
+   toast. Try cancelling a CALLED card (seeded data has one) → the list
+   refetches and the mapped INVALID_TRANSITION message appears as a toast.
+5. **Live queue** — from an upcoming card tap _Live queue_ (also linked from
+   the booking success screen). Big _Now serving_ token, counts row
+   (completed/called/waiting), _Up next_ with masked names (`P***r`), auto
+   refresh every 15s while the screen is focused (leave and return — it
+   resumes), pull-to-refresh for an instant update. Your own row gets the
+   amber **You** badge + accent border; open the same URL logged out (or as
+   another patient) → no You row, no error.
+6. **Feedback** — Past tab → a COMPLETED visit without feedback → _Rate visit_
+   → 5 tappable stars + optional comment → _Submit feedback_ → the card flips
+   to **Rated**. Submit again after a stale-list race → silent "already
+   reviewed" info toast and the card still ends up Rated.
+7. **Rate limiting** (optional) — hammer _Confirm booking_ ~20× within a
+   minute → the sheet shows _Too many requests. Please retry in Ns._ (the
+   seconds come from the server's Retry-After header).
+
+## Known limitations (Phase 6)
+
 - Staff and admin areas are single placeholder screens (Phases 7–8).
 - Doctor self-registration sends `name/phone/password/role` only — the API
   accepts no specialization fields at register (see PR "API GAP").
+- `GET /api/appointments/mine` omits `schedule.id`, so the _Live queue_ button
+  resolves it via the public doctor detail (clinic + weekday match) — see the
+  Phase 6 PR "API GAP" for the suggested 1-line additive fix.
+- The past list cannot know which COMPLETED visits already have feedback
+  (`mine` has no `hasFeedback` flag) — _Rate visit_ is shown and a duplicate
+  submit resolves via 409 ALREADY_REVIEWED (handled gracefully).
 - No appointment reminders screen; push registration is fire-and-forget.
 - `router.replace('/login')` after logout does not hard-reset the history
-  stack (acceptable for Phase 5; revisit in Phase 6).
+  stack (acceptable for now).

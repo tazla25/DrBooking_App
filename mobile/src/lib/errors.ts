@@ -25,6 +25,13 @@ export function isApiError(err: unknown): err is ApiError {
   return err instanceof ApiError;
 }
 
+/** Map any thrown value to the friendly English message (screens call this). */
+export function toFriendlyMessage(err: unknown): string {
+  return err instanceof ApiError
+    ? friendlyMessage(err)
+    : friendlyMessage({ code: 'NETWORK_ERROR', status: 0 });
+}
+
 /** Codes surfaced by api/ (see api/src/lib/errors.ts, rbac.ts, rate-limit.ts, auth.ts). */
 type FriendlyInput = { code: string; status: number; message?: string; retryAfter?: number | null };
 
