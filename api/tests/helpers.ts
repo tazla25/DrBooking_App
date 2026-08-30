@@ -209,6 +209,9 @@ export async function createScheduleFixture(
     endTime: string;
     clinicName: string;
     clinicAddress: string;
+    pinCode: string;
+    landmark: string;
+    mapLink: string;
     avgMinutesPerPatient: number;
     isActive: boolean;
   }> = {},
@@ -221,6 +224,9 @@ export async function createScheduleFixture(
       endTime: overrides.endTime ?? '13:00',
       clinicName: overrides.clinicName ?? 'City Clinic',
       clinicAddress: overrides.clinicAddress ?? '12 MG Road',
+      pinCode: overrides.pinCode ?? null,
+      landmark: overrides.landmark ?? null,
+      mapLink: overrides.mapLink ?? null,
       avgMinutesPerPatient: overrides.avgMinutesPerPatient ?? 10,
       isActive: overrides.isActive ?? true,
     },

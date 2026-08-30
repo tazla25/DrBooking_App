@@ -218,6 +218,72 @@ export const availabilitySchema = z.object({
   isAvailableNow: z.boolean({ message: 'isAvailableNow must be a boolean' }),
 });
 
+// -- Phase 3: patient booking + public queue (contracts #6–12, 32, 33) ---------
+
+// GET /api/doctors — ?q, ?pinCode, ?sort, ?page, ?pageSize (all optional)
+export const doctorsQuerySchema = z.object({
+  q: z.string().trim().max(100, 'Search query is too long').optional(),
+  pinCode: z.string().trim().min(1, 'pinCode must not be empty').max(12, 'pinCode is too long').optional(),
+  sort: z.enum(['rating', 'fee_asc', 'fee_desc'], {
+    message: 'sort must be rating, fee_asc or fee_desc',
+  }).default('rating'),
+  page: z.coerce.number().int('page must be an integer').min(1, 'page must be >= 1').default(1),
+  pageSize: z.coerce
+    .number()
+    .int('pageSize must be an integer')
+    .min(1, 'pageSize must be >= 1')
+    .max(50, 'pageSize must be <= 50')
+    .default(20),
+});
+
+// GET /api/schedules/:id/availability — ?date (optional, defaults to IST today)
+export const availabilityQuerySchema = z.object({
+  date: dateSchema.optional(),
+});
+
+// POST /api/appointments (patient booking) — identity comes from the session,
+// so the body carries ONLY the slot. Any patientName/patientPhone in the body
+// is stripped by zod and never read (v1 IDOR fix).
+export const patientBookingSchema = z.object({
+  scheduleId: z.string().trim().min(1, 'scheduleId is required'),
+  date: dateSchema,
+});
+
+// GET /api/appointments/mine — ?range=upcoming|past, ?page, ?pageSize
+export const mineQuerySchema = z.object({
+  range: z.enum(['upcoming', 'past'], { message: 'range must be upcoming or past' }).default('upcoming'),
+  page: z.coerce.number().int('page must be an integer').min(1, 'page must be >= 1').default(1),
+  pageSize: z.coerce
+    .number()
+    .int('pageSize must be an integer')
+    .min(1, 'pageSize must be >= 1')
+    .max(100, 'pageSize must be <= 100')
+    .default(20),
+});
+
+// GET /api/queue/:scheduleId/:date — dynamic-route params
+export const queuePublicParamsSchema = z.object({
+  scheduleId: z.string().trim().min(1, 'scheduleId is required'),
+  date: dateSchema,
+});
+
+// POST /api/feedback
+export const feedbackSchema = z.object({
+  appointmentId: z.string().trim().min(1, 'appointmentId is required'),
+  rating: z
+    .number()
+    .int('Rating must be an integer')
+    .min(1, 'Rating must be between 1 and 5')
+    .max(5, 'Rating must be between 1 and 5'),
+  comment: z.string().trim().max(1000, 'Comment is too long (max 1000 characters)').optional(),
+});
+
+// POST /api/devices
+export const deviceTokenSchema = z.object({
+  token: z.string().trim().min(10, 'Device token is too short').max(512, 'Device token is too long'),
+  platform: z.enum(['ios', 'android'], { message: "platform must be 'ios' or 'android'" }),
+});
+
 export type WalkInInput = z.infer<typeof walkInSchema>;
 export type ScheduleInput = z.infer<typeof scheduleSchema>;
 export type OverrideCreateInput = z.infer<typeof overrideCreateSchema>;
