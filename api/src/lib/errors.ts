@@ -13,16 +13,19 @@ import { ZodError } from 'zod';
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
+  /** Optional extra response headers (e.g. Retry-After on 429). */
+  readonly headers?: Record<string, string>;
 
-  constructor(status: number, code: string, message: string) {
+  constructor(status: number, code: string, message: string, headers?: Record<string, string>) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.code = code;
+    this.headers = headers;
   }
 
   toResponse(): Response {
-    return jsonResponse(this.status, { ok: false, error: { code: this.code, message: this.message } });
+    return jsonResponse(this.status, { ok: false, error: { code: this.code, message: this.message } }, this.headers);
   }
 }
 
@@ -49,10 +52,10 @@ export function ok<T>(data: T, status = 200): Response {
   return jsonResponse(status, { ok: true, data });
 }
 
-function jsonResponse(status: number, body: unknown): Response {
+function jsonResponse(status: number, body: unknown, extraHeaders?: Record<string, string>): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'content-type': 'application/json; charset=utf-8' },
+    headers: { 'content-type': 'application/json; charset=utf-8', ...extraHeaders },
   });
 }
 

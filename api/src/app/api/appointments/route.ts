@@ -3,6 +3,8 @@ import { requireAuth } from '@/lib/rbac';
 import { patientBookingSchema } from '@/lib/validation';
 import { bookInQueue, runBookingTransaction, getQueueCapacity, ACTIVE_STATUSES } from '@/lib/booking';
 import { dayOfWeekIST, istTodayISO } from '@/lib/time';
+import { notifyUser } from '@/lib/push';
+import { checkBookingRateLimit } from '@/lib/rate-limit';
 import { db } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
@@ -15,14 +17,22 @@ export const dynamic = 'force-dynamic';
  * patientPhone = user.phone. A body-supplied patientName/patientPhone is
  * stripped by zod and never read. DOCTOR/COMPOUNDER/SUPER_ADMIN → 403.
  *
+ * Rate limited per USER (20/min default) — 429 RATE_LIMITED (bypassed in
+ * test env, see src/lib/rate-limit.ts).
+ *
  * ONE transaction (with the shared booking core, retried on queue-number
  * races): CLOSED → 409 SCHEDULE_CLOSED → capacityLeft ≤ 0 → 409 CAPACITY_FULL
  * → duplicate active booking → 409 ALREADY_BOOKED → insert (queueNumber =
  * max+1, fee = doctor's fee at booking time, source ONLINE, status CONFIRMED)
  * + DoctorProfile.appointmentCount increment in the SAME transaction.
+ *
+ * Push trigger (a), fire-and-forget AFTER the transaction commits: the patient
+ * gets "Booking confirmed, token #N". A push failure can never roll the
+ * booking back (src/lib/push.ts swallows everything).
  */
 export const POST = handle(async (request: Request): Promise<Response> => {
   const user = await requireAuth(request, ['PATIENT']);
+  checkBookingRateLimit(user.id);
   const body = patientBookingSchema.parse(await readJsonBody(request));
 
   const today = istTodayISO();
@@ -107,6 +117,17 @@ export const POST = handle(async (request: Request): Promise<Response> => {
         queueNumber: appointment.queueNumber,
         source: 'ONLINE',
       }),
+    },
+  });
+
+  // Push trigger (a) — AFTER commit, fire-and-forget, never blocks the reply.
+  notifyUser(user.id, {
+    title: 'Booking confirmed',
+    body: `Booking confirmed, token #${appointment.queueNumber}`,
+    data: {
+      type: 'BOOKING_CONFIRMED',
+      appointmentId: appointment.id,
+      queueNumber: String(appointment.queueNumber),
     },
   });
 

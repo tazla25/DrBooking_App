@@ -284,6 +284,45 @@ export const deviceTokenSchema = z.object({
   platform: z.enum(['ios', 'android'], { message: "platform must be 'ios' or 'android'" }),
 });
 
+// -- Phase 4: admin, analytics, export, rate limiting (contracts #26–31) ---------
+
+/** Shared pagination for the Phase 4 list routes (?page=&limit=). */
+export const pageLimitQuerySchema = z.object({
+  page: z.coerce.number().int('page must be an integer').min(1, 'page must be >= 1').default(1),
+  limit: z.coerce.number().int('limit must be an integer').min(1, 'limit must be >= 1').max(100, 'limit must be <= 100').default(20),
+});
+
+// GET /api/admin/audit-log — ?page, ?limit, ?userId (actorId filter), ?action
+export const auditLogQuerySchema = pageLimitQuerySchema.extend({
+  userId: z.string().trim().min(1, 'userId must not be empty').optional(),
+  action: z.string().trim().min(1, 'action must not be empty').max(100, 'action filter is too long').optional(),
+});
+
+// POST /api/admin/verify-doctor
+export const verifyDoctorSchema = z.object({
+  userId: z.string().trim().min(1, 'userId is required'),
+  decision: z.enum(['VERIFIED', 'REJECTED'], {
+    message: 'decision must be VERIFIED or REJECTED',
+  }),
+  note: z.string().trim().max(500, 'note is too long (max 500 characters)').optional(),
+});
+
+// GET /api/analytics/revenue — ?days (1..365, default 30)
+export const revenueQuerySchema = z.object({
+  days: z.coerce.number().int('days must be an integer').min(1, 'days must be >= 1').max(365, 'days must be <= 365').default(30),
+});
+
+// GET /api/export/appointments — ?from, ?to (IST business dates)
+export const exportQuerySchema = z
+  .object({
+    from: dateSchema.optional(),
+    to: dateSchema.optional(),
+  })
+  .refine((v) => !v.from || !v.to || v.from <= v.to, {
+    message: 'from must be on or before to',
+    path: ['from'],
+  });
+
 export type WalkInInput = z.infer<typeof walkInSchema>;
 export type ScheduleInput = z.infer<typeof scheduleSchema>;
 export type OverrideCreateInput = z.infer<typeof overrideCreateSchema>;

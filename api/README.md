@@ -141,3 +141,116 @@ curl -s -X POST "$BASE/api/appointments/<ID>/status" -H "authorization: Bearer $
 `DOCTOR_NOT_VERIFIED` · `NOT_FOUND` (scoped 404) · `INVALID_TRANSITION` ·
 `ALREADY_IN_QUEUE` · `SCHEDULE_CLOSED` · `SCHEDULE_INACTIVE` ·
 `OVERRIDE_EXISTS` · `NO_DOCTOR_PROFILE` · `NO_DELEGATED_DOCTOR`
+
+## Patient + public endpoints (Phase 3, #6–12 & 32–33)
+
+All responses use the standard envelope. Public endpoints never expose patient
+phones, patient ids, notes or fees; names on the public queue screen are masked
+(`Priya Nair` → `P***r`).
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| GET | `/api/doctors` | — | VERIFIED doctors only. `?q=`, `?pinCode=`, `?sort=rating\|fee_asc\|fee_desc`, `?page=&pageSize=` |
+| GET | `/api/doctors/:id` | — | Public profile + active schedules + overrides for the next 7 IST days. 404 unless VERIFIED. |
+| GET | `/api/schedules/:id/availability?date=` | — | `{open, reason, capacityLeft, nextQueue, estWaitMin, …}`; `NOT_SCHEDULED_DAY` / `SCHEDULE_CLOSED` reasons. |
+| POST | `/api/appointments` | PATIENT | Book `{scheduleId, date}`. Identity from the session only. 409 `CAPACITY_FULL` / `ALREADY_BOOKED` / `SCHEDULE_CLOSED`. 201 → `{appointment, position, estWaitMin}`. |
+| GET | `/api/appointments/mine` | PATIENT | `?range=upcoming\|past`, paginated. |
+| POST | `/api/appointments/:id/cancel` | PATIENT | Own CONFIRMED booking only → CANCELLED. |
+| GET | `/api/queue/:scheduleId/:date` | — | Live queue screen (masked names, counts, optional `my` block when the caller has a booking in it). |
+| POST | `/api/feedback` | PATIENT | `{appointmentId, rating 1–5, comment?}` on OWN COMPLETED appointment; one per appointment (409 `ALREADY_REVIEWED`); recomputes doctor `avgRating`/`reviewCount`. |
+| POST | `/api/devices` | any role | Upsert `{token, platform}` device token for push. |
+
+## Admin, analytics, export, push, hardening (Phase 4, #26–31)
+
+### Admin endpoints (SUPER_ADMIN only — every other role gets 403)
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/api/admin/pending-doctors` | `role=DOCTOR AND verificationStatus=PENDING`, with DoctorProfile fields, oldest first. `?page=&limit=` → `{items,total,page,limit}`. |
+| POST | `/api/admin/verify-doctor` | `{userId, decision: VERIFIED\|REJECTED, note?}`. Legal: PENDING→VERIFIED/REJECTED, REJECTED→VERIFIED (correction), VERIFIED→VERIFIED (idempotent), VERIFIED→REJECTED (suspension). REJECTED→REJECTED → 409. Status update + `AuditLog` row in ONE transaction (`DOCTOR_VERIFIED` / `DOCTOR_REJECTED`). 404 when the user is missing or not a doctor. |
+| GET | `/api/admin/audit-log` | Newest first. `?page=&limit=&userId=&action=` (same pagination shape). `detail` is the raw JSON string as stored; `actor` is embedded for readability. |
+
+A doctor rejected (suspended) via verify-doctor is immediately blocked from all
+staff routes by the EXISTING `requireVerifiedStaff` gate (403
+`DOCTOR_NOT_VERIFIED`) — no extra code on the staff routes.
+
+### Analytics (DOCTOR own scope; SUPER_ADMIN must pass `?doctorId=<DoctorProfile.id>` — 422 otherwise; COMPOUNDER/PATIENT → 403)
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/api/analytics/summary` | `{today, last7d, last30d}` each `{booked, completed, cancelled, noShow, walkIns, revenue}`. IST day windows `[today-6, today]` / `[today-29, today]`; revenue = sum of fee over COMPLETED (both sources); future appointments never count. |
+| GET | `/api/analytics/revenue?days=30` | Daily `{date, count, revenue}` series of COMPLETED appointments, zero-filled, ascending, IST boundaries. `days` 1–365. |
+
+### CSV export (DOCTOR own scope; SUPER_ADMIN `?doctorId=`; COMPOUNDER/PATIENT → 403)
+
+`GET /api/export/appointments?from=&to=` — STREAMED `text/csv` attachment
+(default range today-30 … today, IST). Columns:
+`date,queueNumber,patientName,phone,doctorName,clinicName,status,source,fee`.
+Success responses are raw CSV (not the JSON envelope); errors still use the
+envelope.
+
+**Formula-injection escape (old-repo bug #9):** every cell starting with
+`=`, `+`, `-` or `@` is prefixed with `'` and CR/LF is stripped inside cells.
+Note that phones are stored WITH the leading `+` (`+91…`), so phone cells are
+deliberately escaped — that is the defense working, not a bug.
+
+### Push notifications (`src/lib/push.ts`)
+
+Env-guarded and failure-proof: `sendToUser` NEVER throws — unconfigured
+providers, network failures and unexpected errors are logged and swallowed.
+Call sites fire-and-forget AFTER the business transaction commits, so a push
+failure can never roll back a booking/cancel/queue-advance. Triggers:
+
+1. `POST /api/appointments` → patient gets **"Booking confirmed, token #N"**.
+2. `POST /api/queue/next` → the CONFIRMED patient now 3rd in the remaining
+   waiting line gets **"You're 3rd in queue"** (fewer than 3 waiting → no push).
+3. Staff set `CANCELLED` via `/api/appointments/:id/status` → patient notified.
+   Walk-ins without an account skip silently.
+
+Token routing by shape: `ExponentPushToken[…]` → Expo push API
+(`EXPO_ACCESS_TOKEN` optional); long plain tokens → FCM legacy endpoint
+(`FIREBASE_SERVER_KEY` required, otherwise skipped with a log); anything else
+is skipped. `PUSH_DISABLED=1` or `NODE_ENV=test` disables all sends.
+
+### Rate limiting (`src/lib/rate-limit.ts`)
+
+In-memory per-key sliding-window limiter (Map-based, no schema change):
+
+| Rule | Key | Default | Env overrides |
+| --- | --- | --- | --- |
+| `POST /api/auth/login` | IP | 10 / minute | `RATE_LIMIT_LOGIN_MAX`, `RATE_LIMIT_LOGIN_WINDOW_MS` |
+| `POST /api/auth/register` | IP | 5 / 15 minutes | `RATE_LIMIT_REGISTER_MAX`, `RATE_LIMIT_REGISTER_WINDOW_MS` |
+| `POST /api/appointments` | user id | 20 / minute | `RATE_LIMIT_BOOKING_MAX`, `RATE_LIMIT_BOOKING_WINDOW_MS` |
+
+Exceeding a limit → `429 RATE_LIMITED` (envelope + `Retry-After` header). The
+limiter is bypassed entirely when `RATE_LIMIT_DISABLED=1` or `NODE_ENV=test`.
+
+**Honest limitation (old-repo bug #8):** the counters live in the Node process
+memory. This protects ONE API instance. Behind a load balancer with N
+instances, each instance counts separately (effective limit ×N) because the
+buckets are not shared. A global limiter needs Redis or a DB model — both are
+deliberately out of stack in this phase (schema stays 0-lines-diff). The limiter
+also trusts `X-Forwarded-For` for the client IP, which is only as trustworthy
+as the proxy in front of the app.
+
+### Security headers + 404 catch-all
+
+`src/proxy.ts` (Next.js 16's name for the middleware convention — same file
+Next 15 called `middleware.ts`) sets on EVERY response:
+`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
+`Referrer-Policy: strict-origin-when-cross-origin`, plus
+`Strict-Transport-Security` in production only. Any unmatched `/api/*` path
+(including bare `/api`) returns the standard 404 envelope
+`{ok:false,error:{code:'NOT_FOUND'}}` instead of an HTML error page.
+
+### Smoke test
+
+```bash
+bun run db:seed && bun run dev     # terminal 1 (seeded dev DB + API on :3000)
+bash tests/smoke.sh                # terminal 2 — 87 checks over every contract #1–33
+SMOKE_BASE_URL=http://localhost:3000 bash tests/smoke.sh   # custom base URL
+```
+
+The script registers timestamp-unique accounts against a fresh schedule every
+run (and presents a unique client IP to the per-IP limiter), so it is safely
+re-runnable; it exits non-zero on the first failure.

@@ -139,3 +139,37 @@ export async function getDoctorScope(user: User): Promise<DoctorScope | null> {
       throw forbidden('Patients cannot access doctor-scoped resources');
   }
 }
+
+/**
+ * Phase 4 gate for analytics (#29–30) and CSV export (#31):
+ *  - DOCTOR       → own doctorId scope (compounders have none of these
+ *                   contracts → plain 403 from requireAuth).
+ *  - SUPER_ADMIN  → MUST target a doctor via ?doctorId= (a DoctorProfile.id);
+ *                   missing or unknown → 422 (the admin has no doctorId scope
+ *                   of their own and these routes never guess one).
+ * A client-sent doctorId is IGNORED for DOCTOR callers (scope law).
+ */
+export async function requireDoctorOrAdminTarget(
+  request: Request,
+): Promise<{ user: User; doctorId: string }> {
+  const user = await requireAuth(request, ['DOCTOR', 'SUPER_ADMIN']);
+
+  if (user.role === 'DOCTOR') {
+    const scope = await getDoctorScope(user);
+    // Unreachable in practice: DOCTOR always has a profile or getDoctorScope throws.
+    if (!scope) throw forbidden();
+    return { user, doctorId: scope.doctorId };
+  }
+
+  // SUPER_ADMIN — the target must come from the query string.
+  const url = new URL(request.url);
+  const target = url.searchParams.get('doctorId')?.trim() ?? '';
+  if (!target) {
+    throw new ApiError(422, 'VALIDATION_ERROR', 'doctorId query parameter is required for SUPER_ADMIN');
+  }
+  const profile = await db.doctorProfile.findUnique({ where: { id: target }, select: { id: true } });
+  if (!profile) {
+    throw new ApiError(422, 'VALIDATION_ERROR', 'doctorId must be a valid DoctorProfile id');
+  }
+  return { user, doctorId: profile.id };
+}

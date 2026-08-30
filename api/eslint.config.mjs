@@ -8,6 +8,8 @@ const eslintConfig = [
     rules: {
       // General
       "no-console": ["warn", { allow: ["warn", "error"] }],
+      // Underscore-prefixed args are intentional placeholders (e.g. middleware(_request)).
+      "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
       // Next.js
       "@next/next/no-img-element": "off",
     },
