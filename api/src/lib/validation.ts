@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { validateDateStr, validateTimeHM } from '@/lib/time';
 
 /**
  * Request validation — zod on EVERY request body (and query).
@@ -112,3 +113,113 @@ export const changePasswordSchema = z.object({
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+
+// -- Phase 2: doctor/compounder panel (contracts #13–25) ------------------------
+
+/** Person/display name — same policy as self-registration names. */
+export const nameSchema = z
+  .string()
+  .trim()
+  .min(2, 'Name must be at least 2 characters')
+  .max(100, 'Name is too long');
+
+/** IST business date 'YYYY-MM-DD' (calendar-checked, not just regex). */
+export const dateSchema = z.string().refine(validateDateStr, 'Invalid date (expected YYYY-MM-DD)');
+
+/** IST business time 'HH:mm' (00:00–23:59). */
+export const timeSchema = z.string().refine(validateTimeHM, 'Invalid time (expected HH:mm)');
+
+/** Statuses a staff member may SET on an appointment (CONFIRMED is book-only). */
+export const settableStatusEnum = z.enum(['CALLED', 'COMPLETED', 'CANCELLED', 'NO_SHOW'], {
+  message: 'Status must be one of CALLED, COMPLETED, CANCELLED, NO_SHOW',
+});
+
+// GET /api/queue/today — ?date & ?doctorId (doctorId honored for SUPER_ADMIN only)
+export const queueTodayQuerySchema = z.object({
+  date: dateSchema.optional(),
+  doctorId: z.string().trim().min(1, 'doctorId must not be empty').optional(),
+});
+
+// GET /api/schedules — optional admin targeting
+export const schedulesQuerySchema = z.object({
+  doctorId: z.string().trim().min(1, 'doctorId must not be empty').optional(),
+});
+
+// POST /api/appointments/walk-in
+export const walkInSchema = z.object({
+  scheduleId: z.string().trim().min(1, 'scheduleId is required'),
+  date: dateSchema,
+  patientName: nameSchema,
+  patientPhone: phoneSchema,
+  notes: z.string().trim().max(2000, 'Notes are too long').optional(),
+  fee: z.number().int('Fee must be an integer').min(0, 'Fee must be >= 0').max(1_000_000, 'Fee is too large').optional(),
+});
+
+// POST /api/appointments/:id/status
+export const appointmentStatusSchema = z.object({
+  status: settableStatusEnum,
+});
+
+// POST/PUT schedules — shared field set (PUT may omit nothing: full replace)
+export const scheduleSchema = z
+  .object({
+    dayOfWeek: z.number().int().min(0, 'dayOfWeek must be 0 (Sun) to 6 (Sat)').max(6, 'dayOfWeek must be 0 (Sun) to 6 (Sat)'),
+    startTime: timeSchema,
+    endTime: timeSchema,
+    clinicName: z.string().trim().min(1, 'clinicName is required'),
+    clinicAddress: z.string().trim().min(1, 'clinicAddress is required'),
+    pinCode: z.string().trim().max(12, 'pinCode is too long').optional(),
+    landmark: z.string().trim().max(200, 'landmark is too long').optional(),
+    mapLink: z.string().trim().max(500, 'mapLink is too long').optional(),
+    avgMinutesPerPatient: z
+      .number()
+      .int('avgMinutesPerPatient must be an integer')
+      .min(1, 'avgMinutesPerPatient must be between 1 and 120')
+      .max(120, 'avgMinutesPerPatient must be between 1 and 120')
+      .default(10),
+  })
+  .refine((v) => v.startTime < v.endTime, {
+    message: 'startTime must be before endTime',
+    path: ['endTime'],
+  });
+
+// POST /api/schedules/:id/overrides
+export const overrideCreateSchema = z.object({
+  date: dateSchema,
+  type: z.enum(SCHEDULE_OVERRIDE_TYPES, {
+    message: 'type must be CLOSED, MODIFIED_HOURS or SPECIAL',
+  }),
+  newStartTime: timeSchema.optional(),
+  newEndTime: timeSchema.optional(),
+  reason: z.string().trim().max(300, 'reason is too long').optional(),
+});
+
+// GET /api/patients — ?q, ?page, ?pageSize
+export const patientsQuerySchema = z.object({
+  q: z.string().trim().max(100, 'Search query is too long').optional(),
+  page: z.coerce.number().int('page must be an integer').min(1, 'page must be >= 1').default(1),
+  pageSize: z.coerce.number().int('pageSize must be an integer').min(1, 'pageSize must be >= 1').max(100, 'pageSize must be <= 100').default(20),
+});
+
+// POST /api/patients/:phone/notes
+export const noteCreateSchema = z.object({
+  note: z.string().trim().min(1, 'Note is required').max(2000, 'Note is too long (max 2000 characters)'),
+  isImportant: z.boolean().optional(),
+});
+
+// POST /api/compounders
+export const compounderCreateSchema = z.object({
+  name: nameSchema,
+  phone: phoneSchema,
+});
+
+// PATCH /api/availability
+export const availabilitySchema = z.object({
+  isAvailableNow: z.boolean({ message: 'isAvailableNow must be a boolean' }),
+});
+
+export type WalkInInput = z.infer<typeof walkInSchema>;
+export type ScheduleInput = z.infer<typeof scheduleSchema>;
+export type OverrideCreateInput = z.infer<typeof overrideCreateSchema>;
+export type NoteCreateInput = z.infer<typeof noteCreateSchema>;
+export type CompounderCreateInput = z.infer<typeof compounderCreateSchema>;

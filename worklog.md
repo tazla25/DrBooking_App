@@ -45,3 +45,33 @@ Stage Summary:
 - GitHub go-live COMPLETE: both branches (main, v2/foundation) pushed to https://github.com/tazla25/DrBooking_App after PAT rotation; v2/foundation contains the Phase 1 commit (7f9b42e) plus Phase 1.5. Supabase prod target verified compatible; local dev remains SQLite with tsc clean and 23/23 jest tests.
 - No secret value has entered git history, commit messages, worklog, README, or command output at any point.
 
+
+---
+Task ID: 3
+Agent: Super Z (main agent)
+Task: Phase 2 — Doctor/Compounder panel API (contracts #13–25): queue, walk-ins, status machine, schedules + overrides, patients + notes, compounder management, availability toggle.
+
+Work Log:
+- Branched v2/doctor-api from an up-to-date main (Phase 1.5 was merged via PR #1).
+- Lib layer: errors.ts handle() now forwards the route context arg so dynamic routes can await params (Next 15+/16 Promise params), backward compatible with Phase 1 one-arg handlers; rbac.ts added requireVerifiedStaff (DOCTOR|COMPOUNDER + VERIFIED → 403 DOCTOR_NOT_VERIFIED otherwise), requireStaffOrAdmin (read routes), requireVerifiedStaffScope / requireVerifiedDoctorScope (caller + NON-NULL scope.doctorId in one call — the ONLY trusted filter); validation.ts added nameSchema/dateSchema/timeSchema + per-route schemas (walk-in, status, schedule incl. start<end refine, override, patients query with z.coerce pagination, note, compounder, availability); new src/lib/queue.ts implements the EXACT estWaitMin formula ((CONFIRMED|CALLED with lower queueNumber in same scheduleId+date) × avgMinutesPerPatient) + status tallies.
+- Routes added (13 files, all zod-validated, envelope everywhere):
+  GET /api/queue/today (?date validated, default istTodayISO; staff scoped, client doctorId ignored; admin must target via ?doctorId=);
+  POST /api/queue/next (single $transaction: complete lowest-queue CALLED, then call lowest-queue CONFIRMED; queueEmpty when none);
+  POST /api/appointments/walk-in (schedule scope→404, isActive, date today-or-future, dayOfWeek match, CLOSED override→409 SCHEDULE_CLOSED; duplicate guard INSIDE tx on (phone,schedule,date,CONFIRMED|CALLED)→409 ALREADY_IN_QUEUE; queueNumber=max+1 with P2002/P2034 retry ×3; fee defaults to DoctorProfile.fee; audited WALK_IN_CREATED);
+  POST /api/appointments/:id/status (state machine CONFIRMED→CALLED|CANCELLED|NO_SHOW, CALLED→COMPLETED, terminals immutable→409 INVALID_TRANSITION naming current status; scoped 404; audits CANCELLED/NO_SHOW only);
+  GET/POST /api/schedules + PUT/DELETE /api/schedules/:id (GET incl. inactive + todayOverride + todayQueueCount(CONFIRMED+CALLED); DELETE soft only isActive=false — history survives; audits SCHEDULE_CHANGED);
+  GET/POST /api/schedules/:id/overrides + DELETE .../:date (CLOSED w/o times; MODIFIED_HOURS/SPECIAL require newStart<newEnd; unique (scheduleId,date)→409 OVERRIDE_EXISTS incl. concurrent P2002; audits OVERRIDE_CHANGED);
+  GET /api/patients (distinct by phone, latest name kept, totalVisits excl. CANCELLED, lastVisit/lastStatus; ?q contains case-insensitive; real page/pageSize/total — grouping+search done in JS for SQLite/Postgres parity, no Postgres-only mode:'insensitive');
+  GET/POST /api/patients/:phone/notes (team-shared within the delegated doctor's team, newest first, author {id,name,role}; authorId=caller);
+  GET/POST /api/compounders + DELETE /api/compounders/:id (DOCTOR-only; create returns ONE-TIME 12-char crypto-random tempPassword with letter+digit, DB stores bcrypt hash only, 409 PHONE_EXISTS; delete soft-deactivates + revokes all sessions → login 403 ACCOUNT_DISABLED; audits COMPOUNDER_CREATED/COMPOUNDER_DEACTIVATED);
+  PATCH /api/availability (doctor own profile / compounder delegated profile via the same trusted scope).
+- Scoping-law interpretation (documented): SUPER_ADMIN read-only on GET /api/schedules (optional ?doctorId=, absent = all doctors) and GET /api/queue/today (doctorId REQUIRED for the per-doctor queue shape → 422 without it) and GET overrides; all write routes + patients/notes/compounders/availability are staff-only per their endpoint contracts.
+- Tests: extended tests/helpers.ts with normalized-phone fixtures (doctors/compounders/admin/patient/schedule/appointment builders + routeContext for dynamic params + put/patch/delete request builders). 8 new suites: queue (scoping incl. ignored client doctorId, estWaitMin incl. completed-ahead exclusion, admin targeting, PENDING 403), walk-in (happy/dup/409s/parallel race → distinct queue numbers/404 foreign schedule/fee default), status machine (all legal + illegal transitions, terminal immutability, audit selectivity), schedules (CRUD validations, soft delete keeps history, admin read-only, todayOverride/todayQueueCount), overrides (CLOSED/MODIFIED_HOURS rules, OVERRIDE_EXISTS, delete + 404s), patients (distinct/latest name/totalVisits/search/pagination/validation), notes (team-shared, author recorded, normalization bucket), compounders (one-time tempPassword that logs in, 409 dup, deactivation kills sessions + blocks login, cross-doctor 404s), availability (doctor+compounder+403/401/422).
+- Verification: bunx tsc --noEmit clean; bun run lint clean (0 warnings); jest 96/96 passed (23 Phase 1 + 73 new).
+- Fixed during the loop: fixture phones now stored NORMALIZED (+91…) exactly like production writes (root cause of 6 initial failures); removed unused imports.
+
+Stage Summary:
+- 13 new route files + 4 lib files touched + 8 new test suites; schema.prisma UNTOUCHED (SCHEMA LAW respected — everything fit the existing 11 models).
+- All contracts #13–25 implemented; every old-system bug in scope (IDOR doctorId override, estWait miscount, check-then-insert walk-in race, terminal resurrection, broken pagination, broken note sharing) has a regression test.
+- Known interpretation decisions: admin write access intentionally absent (read-only per #19 note); PatientNote visibility is phone-keyed by schema (any staff member can query a phone's notes — a doctorId column would require a schema change, deferred); PUT /api/schedules/:id does not reactivate soft-deleted schedules (not in contract).
+- Next phase suggestions: public endpoints (Phase 3) — doctor search + masked queue + online booking; admin verification route (Phase 9 for real SUPER_ADMIN).

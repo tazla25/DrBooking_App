@@ -44,6 +44,66 @@ export async function requireVerifiedDoctor(request: Request): Promise<User> {
 }
 
 /**
+ * Phase 2 staff gate: DOCTOR or COMPOUNDER, caller must be VERIFIED.
+ * PENDING/REJECTED doctors get 403 DOCTOR_NOT_VERIFIED on every doctor-panel
+ * route (contracts #13–25). Compounders are provisioned VERIFIED at creation,
+ * so this check only ever trips for doctors.
+ */
+export async function requireVerifiedStaff(request: Request): Promise<User> {
+  const user = await requireAuth(request, ['DOCTOR', 'COMPOUNDER']);
+  if (user.verificationStatus !== 'VERIFIED') {
+    throw new ApiError(403, 'DOCTOR_NOT_VERIFIED', 'Your doctor account has not been verified yet');
+  }
+  return user;
+}
+
+/**
+ * Phase 2 staff-or-admin gate: verified DOCTOR/COMPOUNDER, or SUPER_ADMIN
+ * (null scope — the caller must handle admin targeting via ?doctorId=).
+ * Used by the read routes where SUPER_ADMIN has read-only access.
+ */
+export async function requireStaffOrAdmin(request: Request): Promise<User> {
+  const user = await requireAuth(request, ['DOCTOR', 'COMPOUNDER', 'SUPER_ADMIN']);
+  if (user.role !== 'SUPER_ADMIN' && user.verificationStatus !== 'VERIFIED') {
+    throw new ApiError(403, 'DOCTOR_NOT_VERIFIED', 'Your doctor account has not been verified yet');
+  }
+  return user;
+}
+
+/**
+ * Verified staff (DOCTOR/COMPOUNDER) + their NON-NULL doctor scope in one
+ * call. The single entry point for every staff-write route (#13–25):
+ * the returned doctorId is the ONLY trusted filter for data access.
+ */
+export async function requireVerifiedStaffScope(
+  request: Request,
+): Promise<{ user: User; doctorId: string }> {
+  const user = await requireVerifiedStaff(request);
+  const scope = await getDoctorScope(user);
+  if (!scope) {
+    // Unreachable: requireVerifiedStaff rejects SUPER_ADMIN (the only null scope).
+    throw forbidden();
+  }
+  return { user, doctorId: scope.doctorId };
+}
+
+/**
+ * Verified DOCTOR + their NON-NULL scope — for doctor-ONLY management routes
+ * (compounder provisioning, #23–24: compounders must not manage compounders).
+ */
+export async function requireVerifiedDoctorScope(
+  request: Request,
+): Promise<{ user: User; doctorId: string }> {
+  const user = await requireVerifiedDoctor(request);
+  const scope = await getDoctorScope(user);
+  if (!scope) {
+    // Unreachable: requireVerifiedDoctor rejects SUPER_ADMIN (the only null scope).
+    throw forbidden();
+  }
+  return { user, doctorId: scope.doctorId };
+}
+
+/**
  * Resolve the doctor scope for clinical data access.
  *
  *  - DOCTOR      → their own DoctorProfile.id

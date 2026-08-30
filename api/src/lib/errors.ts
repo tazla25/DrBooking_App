@@ -60,13 +60,17 @@ function jsonResponse(status: number, body: unknown): Response {
  * Wrap a route handler so every thrown error becomes the standard envelope.
  * Zod errors → 422 VALIDATION_ERROR; Prisma unique violations → 409;
  * anything else → 500 INTERNAL_ERROR (logged, message never leaked).
+ *
+ * The returned handler forwards the second (context) argument so dynamic
+ * routes can `await context.params` — Next.js 15+/16 passes route params as
+ * a Promise. Static routes simply ignore it.
  */
-export function handle(
-  route: (request: Request) => Promise<Response>,
-): (request: Request) => Promise<Response> {
-  return async (request: Request): Promise<Response> => {
+export function handle<C = unknown>(
+  route: (request: Request, context: C) => Promise<Response>,
+): (request: Request, context?: C) => Promise<Response> {
+  return async (request: Request, context?: C): Promise<Response> => {
     try {
-      return await route(request);
+      return await route(request, context as C);
     } catch (err) {
       if (err instanceof ApiError) return err.toResponse();
       if (err instanceof ZodError) return zodErrorResponse(err);
