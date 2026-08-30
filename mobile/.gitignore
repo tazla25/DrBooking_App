@@ -1,0 +1,10 @@
+node_modules/
+.expo/
+dist/
+web-build/
+coverage/
+expo-env.d.ts
+
+# env files — never commit (values live in .env / .env.local, gitignored)
+.env
+.env.local
