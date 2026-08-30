@@ -57,7 +57,14 @@ mobile/
 │   ├── demo.tsx             # DEV-ONLY design-system showcase
 │   ├── (auth)/              # login · register · change-password
 │   ├── (tabs)/              # PATIENT: Find Doctors · Appointments · Profile
-│   ├── (staff)/             # DOCTOR/COMPOUNDER placeholder ("Phase 7")
+│   ├── (staff)/             # DOCTOR/COMPOUNDER console (Phase 7 — tabbed)
+│   │   ├── _layout.tsx      # role-guarded Tabs (Team hidden for compounders)
+│   │   ├── index.tsx        # Today: queue, availability, walk-ins, call next
+│   │   ├── patients.tsx     # patient book (debounced search, paginated)
+│   │   ├── patient/[phone].tsx  # shared team notes for one phone
+│   │   ├── schedules.tsx    # schedule CRUD + day overrides
+│   │   ├── team.tsx         # compounder management (DOCTOR only)
+│   │   └── profile.tsx      # identity · change password · sign out
 │   ├── (admin)/             # SUPER_ADMIN placeholder ("Phase 8")
 │   ├── doctor/[id].tsx      # public doctor detail (Book → /book/[doctorId])
 │   ├── book/[doctorId].tsx  # Phase 6: schedule + date + availability + confirm
@@ -66,9 +73,9 @@ mobile/
 ├── src/
 │   ├── theme/               # design tokens (colors, spacing, radii, typography)
 │   ├── components/          # Glass kit (+ GlassModal, StarRating, GlassToast, EmptyState)
-│   ├── lib/                 # api · session · errors · appointments · time (IST) · push · validation
+│   ├── lib/                 # api · session · errors · appointments · staff · time (IST) · push · validation
 │   ├── store/               # zustand auth store
-│   └── hooks/               # useDebouncedValue · useAppointments · useAvailability · useLiveQueue
+│   └── hooks/               # useDebouncedValue · useAppointments · useAvailability · useLiveQueue · useTodayQueue · usePatients · useSchedules
 └── jest.config.js           # jest-expo preset, global secure-store/router mocks
 ```
 
@@ -81,6 +88,10 @@ mobile/
   hydrated on boot behind the splash gate.
 - **Scoping law**: the client never sends a `doctorId` for staff roles — the
   server scope wins. A 404 for someone else's resource is by design.
+- **Staff queue rows show FULL patient name + phone** — by design (staff-only
+  screen; masking exists only on the public patient queue).
+- **Phone path params are `encodeURIComponent`-ed** (`/api/patients/:phone/notes`
+  — phones contain `+`).
 - **Time law**: business dates (`YYYY-MM-DD`) and times (`HH:mm`, IST) are
   passed through as plain strings — never `new Date(...)` timezone math.
 - **Envelope**: `{ ok:true, data } | { ok:false, error:{ code, message } }` everywhere.
@@ -143,17 +154,97 @@ each seeded patient already has TODAY appointments, so lists are non-empty).
    minute → the sheet shows _Too many requests. Please retry in Ns._ (the
    seconds come from the server's Retry-After header).
 
-## Known limitations (Phase 6)
+## Manual test walkthrough (Phase 7 — staff console)
 
-- Staff and admin areas are single placeholder screens (Phases 7–8).
+Start the API + app as in _Getting started_. Seed data note: **doctor
+`+919876543210` / `Test@1234`** (Dr. Ananya Sharma, VERIFIED, has TODAY
+appointments from patients `+919812345601…605`, mixed statuses and sources);
+**compounder `+919876543220` / `Test@1234`** must complete the FORCED password
+change on first login (the Phase 5 gate — you land on the change-password
+screen before any staff tab is reachable).
+
+1. **Today tab (doctor)** — sign in as the doctor. Header card shows
+   _Dr. Ananya Sharma_ + the **Available now** switch (optimistic — toggle it
+   with the network off → it rolls back + error toast). Below: counts row
+   (Confirmed/Called/Completed/Cancelled/No-show — the seed makes all of them
+   non-zero), the queue list ordered by token with FULL names + phones BY
+   DESIGN (WALK-IN rows carry the amber chip; rows with notes show the
+   document icon → tap to reveal), the CALLED row highlighted as
+   **Now serving**, and per-row actions exactly per the status matrix:
+   CONFIRMED → [Call][No-show][Cancel] · CALLED → [Complete] · terminal → none.
+   The queue auto-refreshes every 15s while the tab is focused (watch a token
+   change status from a second device/curl) — pull-to-refresh works too.
+2. **Call next** — tap it: one server transaction completes the called token
+   and calls the next (toast: _Completed #N, called #M_); with nothing left it
+   says _Queue is empty_. Browse the date strip to a past/future date →
+   **Call next disables** with the hint _queue actions work on today's queue
+   only_ (history browsing is read-only; walk-ins stay enabled for future
+   dates, disabled for past ones).
+3. **Walk-in** — _Add walk-in_ → the modal lists only ACTIVE schedules for the
+   viewed weekday (pick via chips), name + phone (+91 normalization, same
+   rules as login), optional fee (blank = doctor's fee) and notes. Submit →
+   toast with the new token number + the queue refetches. Submit the same
+   phone again → _This patient is already in the queue for this schedule._
+   stays inside the modal.
+4. **Cancel / No-show** — require the destructive glass confirm modal;
+   after confirming, the toast reports the outcome and the list refetches.
+   Race a stale list (complete a token from curl after loading) → the app
+   maps INVALID_TRANSITION and refetches.
+5. **Patients tab** — debounced search (type "pri" — nothing fires until you
+   pause; `?q=` hits name AND phone), rows show avatar, name, phone, last
+   visit date, status chip of the last visit, _N visits_. Tap a row (or its
+   _Notes_ button) → the notes screen for that phone (the URL has the phone
+   encoded — phones contain `+`). Newest first with author + role chip;
+   important notes carry the amber badge. Add a note (multiline field +
+   _Mark as important_ switch) → it prepends instantly. Pull-to-refresh on
+   both screens. Empty search → hint empty state.
+6. **Schedules tab** — schedules grouped by day with time range, clinic +
+   address, ~min/patient, a green _N today_ badge when the queue is non-empty,
+   a _Today: Closed/Modified hours/Special_ chip when an override applies,
+   and INACTIVE rows muted with an INACTIVE chip. _New schedule_ → 7-day
+   chips, HH:mm start/end (start ≥ end is rejected client-side), clinic
+   fields, minutes-per-patient 1–120. _Edit_ prefills the same form and PUTs
+   the FULL body. _Deactivate_ uses the soft-delete wording ("nothing is
+   deleted — history is kept"); the row re-appears muted.
+   _Overrides_ → per-schedule modal: existing overrides (date, type chip,
+   times, reason, per-row delete) + an add form with type chips — **CLOSED
+   hides the time inputs** (and rejects them client-side), MODIFIED_HOURS /
+   SPECIAL require both times with start < end, dates chosen from a 14-day
+   IST chip strip. Adding a second override for the same date → _An override
+   already exists for this date — delete it first._
+7. **Team tab (doctor only)** — hidden entirely for the compounder login.
+   Rows show name/phone/ACTIVE chip, joined date, and the amber
+   _Must change password — never signed in_ hint. _Add compounder_ → the
+   ONE-TIME temp password screen: large monospace password + _Copy password_
+   (expo-clipboard) + the blocked-close pattern — _Close forever_ stays
+   disabled until you tick _I've saved it_. Duplicate phone → _An account
+   with this phone number already exists._ _Deactivate_ warns that sessions
+   are revoked immediately and there is NO reactivate.
+8. **Compounder experience** — sign in as `+919876543220`: forced
+   change-password first, then the same console minus the Team tab; the
+   header shows _Compounder · assisting Dr. Ananya Sharma_; availability +
+   queue + walk-ins + schedules + patients + notes all operate on the
+   delegated doctor's scope (never a client-sent doctorId).
+9. **Role guard** — sign in as patient `+919812345601` and try to deep-link
+   to `/(staff)/patients` → redirected to the patient tabs (the API remains
+   the real gate).
+
+## Known limitations (Phase 7)
+
+- Admin area (SUPER_ADMIN) is still a placeholder (Phase 8).
+- Availability switch state comes from the PUBLIC doctor detail
+  (`GET /api/doctors/:id` — the only place `isAvailableNow` is exposed); for a
+  PENDING doctor the switch is hidden (their staff endpoints 403 with the
+  verification message until an admin verifies them).
+- "Call next" always operates on IST today server-side — the screen enforces
+  this by disabling the button on non-today dates rather than sending a date.
+- No push notifications FOR STAFF in this phase (patients' queue-advance
+  pushes are server-side and unchanged).
+- Compounder reactivation does not exist (no endpoint — by design).
+- Carried over from Phase 6 (API GAPs, api/ frozen): `GET /api/appointments/mine`
+  omits `schedule.id` (live-queue link resolved via the public doctor detail)
+  and has no `hasFeedback` flag (duplicate feedback resolves via 409).
 - Doctor self-registration sends `name/phone/password/role` only — the API
-  accepts no specialization fields at register (see PR "API GAP").
-- `GET /api/appointments/mine` omits `schedule.id`, so the _Live queue_ button
-  resolves it via the public doctor detail (clinic + weekday match) — see the
-  Phase 6 PR "API GAP" for the suggested 1-line additive fix.
-- The past list cannot know which COMPLETED visits already have feedback
-  (`mine` has no `hasFeedback` flag) — _Rate visit_ is shown and a duplicate
-  submit resolves via 409 ALREADY_REVIEWED (handled gracefully).
-- No appointment reminders screen; push registration is fire-and-forget.
+  accepts no specialization fields at register (see the Phase 5 PR "API GAP").
 - `router.replace('/login')` after logout does not hard-reset the history
   stack (acceptable for now).

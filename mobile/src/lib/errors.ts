@@ -62,6 +62,8 @@ export function friendlyMessage({ code, status, message, retryAfter }: FriendlyI
       return 'This schedule is fully booked for that day.';
     case 'SCHEDULE_CLOSED':
       return 'The clinic is closed on that day.';
+    case 'SCHEDULE_INACTIVE':
+      return 'This schedule has been deactivated. Reactivate it first.';
     case 'INVALID_TRANSITION':
       return message ?? 'This action is not allowed for the current status.';
     case 'ACCOUNT_NOT_VERIFIED':
@@ -72,7 +74,7 @@ export function friendlyMessage({ code, status, message, retryAfter }: FriendlyI
     case 'NOT_COMPLETED':
       return 'You can review a visit only after it is completed.';
     case 'OVERRIDE_EXISTS':
-      return 'An override is already set for that date.';
+      return 'An override already exists for this date — delete it first.';
     case 'INTERNAL_ERROR':
       return 'Something went wrong. Please try again.';
     case 'NETWORK_ERROR':
