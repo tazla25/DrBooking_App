@@ -38,6 +38,9 @@ export default function RootLayout() {
         <Stack.Screen name="(staff)" />
         <Stack.Screen name="(admin)" />
         <Stack.Screen name="doctor/[id]" />
+        <Stack.Screen name="book/[doctorId]" />
+        <Stack.Screen name="booking-success" />
+        <Stack.Screen name="queue/[scheduleId]/[date]" />
         {__DEV__ ? <Stack.Screen name="demo" /> : null}
       </Stack>
     </>

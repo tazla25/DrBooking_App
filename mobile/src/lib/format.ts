@@ -44,3 +44,11 @@ export function formatDateISO(dateISO: string): string {
   if (!y || !m || !d) return dateISO;
   return `${d} ${months[Number(m) - 1] ?? m} ${y}`;
 }
+
+/** '2026-08-30' → '30 Aug' (compact chip form for the date strip). */
+export function formatDayMonth(dateISO: string): string {
+  const full = formatDateISO(dateISO);
+  const parts = full.split(' ');
+  if (parts.length !== 3) return dateISO;
+  return `${parts[0]} ${parts[1]}`;
+}
