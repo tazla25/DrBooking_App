@@ -32,12 +32,15 @@ carried-over logic.**
 | `api/src/lib/` | Shared server libraries: time (IST), errors, validation, auth, RBAC. |
 | `api/src/app/api/` | REST endpoints (one folder per resource). |
 | `api/tests/` | Jest suites (route-handler level — no HTTP server needed). |
-| `mobile/` | Expo placeholder (Phase 2+). |
+| `mobile/` | Expo app (SDK 57, expo-router, TypeScript strict) — Phase 5+: design system, auth, patient screens. See `mobile/README.md`. |
+| `mobile/app/` | expo-router routes (auth group, patient tabs, staff/admin placeholders, doctor detail). |
+| `mobile/src/` | theme tokens, Glass component kit, api client/session/errors/push, zustand auth store. |
 
 ## Stack (locked)
 
 - **api/** — Next.js 16 (App Router, TypeScript), REST API routes only; no UI pages
-- **mobile/** — Expo SDK 52+, Expo Router, React Native, TypeScript (placeholder this phase)
+- **mobile/** — Expo SDK 57 (Expo Go compatible), expo-router v57 (typed routes),
+  React Native 0.86, TypeScript strict, zustand + expo-secure-store — **live from Phase 5**
 - **DB** — Prisma ORM. Schema at `api/prisma/schema.prisma`. SQLite for local dev,
   Postgres (Supabase) for prod → **no Prisma `enum` / `String[]` / `Json` types**
   (all enumerated values are plain `String` columns validated by zod at the boundary)
@@ -54,6 +57,23 @@ bun run db:push        # create/sync the SQLite dev database
 bun run db:seed        # seed dev data (see below)
 bun run dev            # start the API on http://localhost:3000
 ```
+
+## Mobile app (Phase 5+)
+
+```bash
+cd api && npm i && npx prisma db push && npx tsx prisma/seed.ts && npm run dev  # API on :3000
+
+cd mobile
+bun install                                  # standalone (not a workspace member)
+cp .env.example .env.local                   # EXPO_PUBLIC_API_URL=http://localhost:3000
+EXPO_PUBLIC_API_URL=http://localhost:3000 npx expo start   # scan with Expo Go
+```
+
+Gates (from `mobile/`): `npm run typecheck` · `npm run lint` · `npm test` (45 tests).
+Design system: **glassmorphism pastel blue-purple** — full-screen gradient
+`#BFD9F2 → #C7E3EC → #CBC6E8`, translucent glass cards, gradient pill CTAs,
+status chips. Dev-only demo screen: `app/demo.tsx` (linked from Find Doctors / Profile).
+Details: `mobile/README.md`.
 
 Verify: `curl http://localhost:3000/` → `{"ok":true,"data":{"service":"dr-booking-api",...}}`
 
@@ -168,6 +188,8 @@ allowed string values live in `api/prisma/schema.prisma`.
 
 - **Done — Phase 1 (auth), Phase 2 (doctor/compounder panel), Phase 3 (patient
   booking + public queue), Phase 4 (admin verification, analytics, CSV export,
-  push service, rate limiting, security headers, smoke tests).**
-- **Next — Phase 5+:** Expo mobile app (screens + push registration),
-  Postgres/Supabase migration of the runtime DATABASE_URL, deployment.
+  push service, rate limiting, security headers, smoke tests), Phase 5 (mobile
+  scaffold + glassmorphism design system + auth flow + Find Doctors).**
+- **Next — Phase 6+:** patient booking flow on mobile (availability, book,
+  my-appointments, live queue, feedback), staff panel (Phase 7), admin console
+  (Phase 8), EAS production builds (Phase 9), Postgres/Supabase migration.
