@@ -1,0 +1,18 @@
+{
+  "name": "dr-booking",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Dr_Booking App v2 — clinic appointment booking platform (India). Monorepo: Next.js REST API + Expo mobile app.",
+  "workspaces": [
+    "api"
+  ],
+  "scripts": {
+    "dev": "cd api && bun run dev",
+    "lint": "cd api && bun run lint",
+    "typecheck": "cd api && bun run typecheck",
+    "test": "cd api && bun run test",
+    "db:push": "cd api && bun run db:push",
+    "db:generate": "cd api && bun run db:generate",
+    "db:seed": "cd api && bun run db:seed"
+  }
+}

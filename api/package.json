@@ -1,0 +1,38 @@
+{
+  "name": "@dr-booking/api",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Dr_Booking v2 REST API — Next.js 16 App Router (API routes only, no UI pages).",
+  "scripts": {
+    "dev": "next dev -p 3000 2>&1 | tee ../dev.log",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "jest --runInBand",
+    "db:push": "prisma db push --accept-data-loss",
+    "db:generate": "prisma generate",
+    "db:seed": "bun prisma/seed.ts"
+  },
+  "prisma": {
+    "seed": "bun prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.11.1",
+    "bcryptjs": "^3.0.2",
+    "next": "^16.1.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zod": "^4.0.2"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.13",
+    "@types/node": "^22.10.2",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "^16.1.1",
+    "jest": "^29.7.0",
+    "prisma": "^6.11.1",
+    "ts-jest": "^29.2.5",
+    "typescript": "^5"
+  }
+}

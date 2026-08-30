@@ -1,0 +1,237 @@
+// Dr_Booking App v2 — Prisma schema
+//
+// DB strategy: SQLite for local dev, Postgres (Supabase) for production.
+// => Cross-DB compatibility rules (NON-NEGOTIABLE):
+//    - NO Prisma `enum` types (SQLite does not support them)
+//    - NO `String[]` list types
+//    - NO `Json` column types
+//    All enumerated values are plain Strings; allowed values are documented
+//    below and enforced at the API boundary with zod (src/lib/validation.ts).
+//
+// Business date/time conventions (see src/lib/time.ts):
+//    - `date` fields are 'YYYY-MM-DD' strings in IST (Asia/Kolkata)
+//    - `startTime` / `newStartTime` etc. are 'HH:mm' strings in IST
+//    - `dayOfWeek` is 0 (Sunday) .. 6 (Saturday) of the IST calendar day
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Users & auth
+// ---------------------------------------------------------------------------
+
+model User {
+  id                 String    @id @default(cuid())
+  phone              String    @unique // E.164-ish: +91XXXXXXXXXX / +880XXXXXXXXXX
+  passwordHash       String // bcryptjs, 10 rounds
+  name               String
+  role               String // PATIENT | DOCTOR | COMPOUNDER | SUPER_ADMIN
+  verificationStatus String    @default("PENDING") // PENDING | VERIFIED | REJECTED
+  mustChangePassword Boolean   @default(false)
+  isActive           Boolean   @default(true)
+  delegatedDoctorId  String? // DoctorProfile.id — scope for COMPOUNDER accounts
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  doctorProfile   DoctorProfile?  @relation("DoctorProfileUser")
+  delegatedDoctor DoctorProfile?  @relation("DelegatedCompounders", fields: [delegatedDoctorId], references: [id], onDelete: SetNull)
+  sessions        Session[]
+  deviceTokens    DeviceToken[]
+  auditLogs       AuditLog[]     @relation("AuditActor")
+  patientNotes    PatientNote[]  @relation("PatientNoteAuthor")
+  scheduleOverrides ScheduleOverride[] @relation("ScheduleOverrideCreator")
+  appointmentsAsPatient Appointment[]  @relation("AppointmentPatient")
+
+  @@index([role])
+  @@index([delegatedDoctorId])
+}
+
+// Opaque bearer-token sessions. The client keeps the raw 32-byte
+// crypto-random token; only SHA-256(token) is persisted (tokenHash).
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime // 30 days from issue
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model DeviceToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique // push token (FCM/APNs)
+  platform  String // ios | android
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// Failed login attempts — powers the 5 failures / 15 minutes lockout.
+model FailedLogin {
+  id          String   @id @default(cuid())
+  phone       String // normalized phone
+  ipAddress   String?
+  attemptedAt DateTime @default(now())
+
+  @@index([phone, attemptedAt])
+}
+
+// Append-only audit trail. `detail` is a JSON-encoded string (no Json column).
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  action    String // e.g. AUTH_REGISTER | AUTH_PASSWORD_CHANGED
+  target    String? // e.g. "user:<id>"
+  detail    String? // JSON-encoded metadata
+  createdAt DateTime @default(now())
+
+  actor User? @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([actorId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Doctors, schedules & appointments
+// ---------------------------------------------------------------------------
+
+model DoctorProfile {
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  fullName         String
+  specialization   String?
+  fee              Int? // INR
+  yearsExperience  Int?
+  bio              String?
+  avgRating        Float    @default(0)
+  reviewCount      Int      @default(0)
+  appointmentCount Int      @default(0)
+  isAvailableNow   Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user         User           @relation("DoctorProfileUser", fields: [userId], references: [id], onDelete: Cascade)
+  compounders  User[]         @relation("DelegatedCompounders")
+  schedules    Schedule[]
+  appointments Appointment[]
+
+  @@index([isAvailableNow])
+}
+
+// Weekly recurring schedule. `dayOfWeek` refers to the IST calendar day.
+model Schedule {
+  id                   String   @id @default(cuid())
+  doctorId             String
+  dayOfWeek            Int // 0 = Sunday … 6 = Saturday (IST)
+  startTime            String // HH:mm IST
+  endTime              String // HH:mm IST
+  clinicName           String
+  clinicAddress        String
+  pinCode              String?
+  landmark             String?
+  mapLink              String?
+  avgMinutesPerPatient Int      @default(10)
+  isActive             Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  doctor     DoctorProfile      @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  overrides  ScheduleOverride[]
+  appointments Appointment[]
+
+  @@index([doctorId, isActive])
+  @@index([dayOfWeek])
+}
+
+// One-off changes for a specific date (holidays, special hours…).
+model ScheduleOverride {
+  id           String   @id @default(cuid())
+  scheduleId   String
+  date         String // YYYY-MM-DD (IST)
+  type         String // CLOSED | MODIFIED_HOURS | SPECIAL
+  newStartTime String? // HH:mm IST — used when type is MODIFIED_HOURS or SPECIAL
+  newEndTime   String? // HH:mm IST
+  reason       String?
+  createdById  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  schedule   Schedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  createdBy  User?    @relation("ScheduleOverrideCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([scheduleId, date])
+  @@index([date])
+}
+
+// Appointment queue. patientId is null for WALK_IN bookings without an account.
+// queueNumber is unique per (schedule, date).
+model Appointment {
+  id           String   @id @default(cuid())
+  scheduleId   String
+  doctorId     String
+  patientId    String?
+  patientName  String
+  patientPhone String
+  date         String // YYYY-MM-DD (IST)
+  queueNumber  Int
+  status       String   @default("CONFIRMED") // CONFIRMED | CALLED | COMPLETED | CANCELLED | NO_SHOW
+  source       String   @default("ONLINE") // ONLINE | WALK_IN
+  fee          Int? // INR at booking time
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  schedule   Schedule      @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  doctor     DoctorProfile @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  patient    User?         @relation("AppointmentPatient", fields: [patientId], references: [id], onDelete: SetNull)
+  feedback   Feedback?
+
+  @@unique([scheduleId, date, queueNumber])
+  @@index([patientId])
+  @@index([doctorId, date])
+  @@index([scheduleId, date])
+  @@index([status])
+  @@index([date])
+}
+
+model Feedback {
+  id            String   @id @default(cuid())
+  appointmentId String   @unique
+  rating        Int // 1..5
+  comment       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+}
+
+// Clinical/operational notes keyed by patient phone (works for walk-ins too).
+model PatientNote {
+  id           String   @id @default(cuid())
+  patientPhone String
+  authorId     String?
+  note         String
+  isImportant  Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  author User? @relation("PatientNoteAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([patientPhone])
+}

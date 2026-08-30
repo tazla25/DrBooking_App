@@ -1,0 +1,81 @@
+import type { User } from '@prisma/client';
+import { db } from '@/lib/db';
+import { ApiError, forbidden, unauthorized } from '@/lib/errors';
+import { getCurrentUser } from '@/lib/auth';
+import type { Role } from '@/lib/validation';
+
+/**
+ * Server-side role-based access control.
+ *
+ * RULES (fixes the v1 bugs):
+ *  - EVERY non-public route calls requireAuth([roles]) server-side.
+ *  - DOCTOR and COMPOUNDER data access is scoped by their doctorId via
+ *    getDoctorScope(); a client-sent doctorId can never override the
+ *    server-side scope — routes must ignore/validate any client doctorId.
+ *  - COMPOUNDER inherits the delegated doctor's scope (User.delegatedDoctorId).
+ *  - SUPER_ADMIN has no scope (null) = unrestricted.
+ */
+
+export interface DoctorScope {
+  doctorId: string; // DoctorProfile.id — the ONLY trusted value
+}
+
+/**
+ * Authenticate the request and (optionally) enforce roles.
+ * Throws 401 (no/invalid token) or 403 (role not allowed, inactive handled
+ * by getCurrentUser returning null).
+ */
+export async function requireAuth(request: Request, roles?: readonly Role[]): Promise<User> {
+  const user = await getCurrentUser(request);
+  if (!user) throw unauthorized();
+  if (roles && roles.length > 0 && !roles.includes(user.role as Role)) {
+    throw forbidden();
+  }
+  return user;
+}
+
+/** requireAuth for DOCTOR + VERIFIED — blocks PENDING/REJECTED doctors. */
+export async function requireVerifiedDoctor(request: Request): Promise<User> {
+  const user = await requireAuth(request, ['DOCTOR']);
+  if (user.verificationStatus !== 'VERIFIED') {
+    throw new ApiError(403, 'DOCTOR_NOT_VERIFIED', 'Your doctor account has not been verified yet');
+  }
+  return user;
+}
+
+/**
+ * Resolve the doctor scope for clinical data access.
+ *
+ *  - DOCTOR      → their own DoctorProfile.id
+ *  - COMPOUNDER  → the delegated doctor's DoctorProfile.id (inherited scope)
+ *  - SUPER_ADMIN → null (unrestricted — caller must handle null explicitly)
+ *  - PATIENT     → 403 (patients never get a doctor scope)
+ *
+ * NOTE: This is the ONLY place scope is derived, always server-side, always
+ * from the authenticated user — never from request parameters.
+ */
+export async function getDoctorScope(user: User): Promise<DoctorScope | null> {
+  switch (user.role) {
+    case 'SUPER_ADMIN':
+      return null;
+
+    case 'DOCTOR': {
+      const profile = await db.doctorProfile.findUnique({ where: { userId: user.id } });
+      if (!profile) {
+        throw new ApiError(403, 'NO_DOCTOR_PROFILE', 'No doctor profile is linked to this account');
+      }
+      return { doctorId: profile.id };
+    }
+
+    case 'COMPOUNDER': {
+      if (!user.delegatedDoctorId) {
+        throw new ApiError(403, 'NO_DELEGATED_DOCTOR', 'This compounder is not delegated to any doctor');
+      }
+      // Inherit the delegated doctor's scope.
+      return { doctorId: user.delegatedDoctorId };
+    }
+
+    default:
+      throw forbidden('Patients cannot access doctor-scoped resources');
+  }
+}
