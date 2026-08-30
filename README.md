@@ -33,8 +33,8 @@ carried-over logic.**
 | `api/src/app/api/` | REST endpoints (one folder per resource). |
 | `api/tests/` | Jest suites (route-handler level — no HTTP server needed). |
 | `mobile/` | Expo app (SDK 57, expo-router, TypeScript strict) — Phase 5+: design system, auth, patient screens. See `mobile/README.md`. |
-| `mobile/app/` | expo-router routes (auth group, patient tabs, staff/admin placeholders, doctor detail). |
-| `mobile/src/` | theme tokens, Glass component kit, api client/session/errors/push, zustand auth store. |
+| `mobile/app/` | expo-router routes (auth group, patient tabs, staff console tabs, admin placeholder, doctor detail, booking, live queue). |
+| `mobile/src/` | theme tokens, Glass component kit, api client/session/errors/push, staff console lib + hooks, zustand auth store. |
 
 ## Stack (locked)
 
@@ -189,7 +189,10 @@ allowed string values live in `api/prisma/schema.prisma`.
 - **Done — Phase 1 (auth), Phase 2 (doctor/compounder panel), Phase 3 (patient
   booking + public queue), Phase 4 (admin verification, analytics, CSV export,
   push service, rate limiting, security headers, smoke tests), Phase 5 (mobile
-  scaffold + glassmorphism design system + auth flow + Find Doctors).**
-- **Next — Phase 6+:** patient booking flow on mobile (availability, book,
-  my-appointments, live queue, feedback), staff panel (Phase 7), admin console
-  (Phase 8), EAS production builds (Phase 9), Postgres/Supabase migration.
+  scaffold + glassmorphism design system + auth flow + Find Doctors), Phase 6
+  (patient booking flow: availability, booking, my-appointments, live queue,
+  feedback), Phase 7 (mobile staff console: Today queue + walk-ins + status
+  machine, patient book + team notes, schedules + overrides, compounder
+  management, availability toggle).**
+- **Next — Phase 8+:** admin console (Phase 8), EAS production builds
+  (Phase 9), Postgres/Supabase migration.
