@@ -99,6 +99,7 @@ export function NotificationsCard() {
           accessibilityHint="Re-checks permission and re-registers this device for push notifications"
           disabled={checking}
           onPress={() => void onPress()}
+          android_ripple={{ color: colors.ripple, borderless: false, foreground: true }}
           style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
         >
           <Ionicons name="notifications-outline" size={22} color={colors.ctaGradient.end} />
@@ -143,6 +144,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.inner,
     borderWidth: 1,
     borderColor: colors.glass.border,
+    overflow: 'hidden', // ripple clips to the rounded inner panel
   },
   row: {
     flexDirection: 'row',

@@ -200,7 +200,11 @@ export default function AdminVerificationScreen() {
                   </View>
                 ) : (
                   <View style={styles.noProfile}>
-                    <Ionicons name="alert-circle-outline" size={16} color="#B27415" />
+                    <Ionicons
+                      name="alert-circle-outline"
+                      size={16}
+                      color={colors.status.PENDING.fg}
+                    />
                     <Text style={styles.noProfileText}>
                       No profile yet — the doctor has not added clinic details.
                     </Text>
@@ -294,7 +298,8 @@ function BioText({ bio }: { bio: string }) {
         <Pressable
           accessibilityRole="button"
           onPress={() => setExpanded((v) => !v)}
-          hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          style={({ pressed }) => [styles.bioToggleWrap, pressed && styles.bioTogglePressed]}
         >
           <Text style={styles.bioToggle}>{expanded ? 'Less' : 'More'}</Text>
         </Pressable>
@@ -325,6 +330,8 @@ const styles = StyleSheet.create({
   bioWrap: { gap: 2 },
   bio: { ...typography.caption, color: colors.text.secondary },
   bioToggle: { ...typography.captionSemi, color: colors.ctaGradient.end },
+  bioToggleWrap: { alignSelf: 'flex-start' },
+  bioTogglePressed: { opacity: 0.6 },
   bioMissing: { ...typography.caption, color: colors.text.secondary, fontStyle: 'italic' },
   noProfile: {
     flexDirection: 'row',
@@ -337,7 +344,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
-  noProfileText: { ...typography.caption, color: '#B27415', flex: 1 },
+  noProfileText: { ...typography.caption, color: colors.status.PENDING.fg, flex: 1 },
   applied: { ...typography.caption, color: colors.text.secondary },
   actions: { flexDirection: 'row', gap: spacing.md },
   actionBtn: { flex: 1 },

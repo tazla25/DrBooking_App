@@ -21,9 +21,11 @@ import {
   GlassTextField,
 } from '@/components';
 import { api } from '@/lib/api';
+import { hapticSelection } from '@/lib/haptics';
 import { ApiError, friendlyMessage } from '@/lib/errors';
 import { formatFee, formatRating } from '@/lib/format';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { AnimatedChip, AnimatedEntrance } from '@/components/motion';
 import { colors, radii, spacing, typography } from '@/theme';
 import type { DoctorSort, DoctorSummary, DoctorsListResponse } from '@/lib/types';
 
@@ -211,7 +213,10 @@ export default function FindDoctorsScreen() {
               key={s.key}
               accessibilityRole="button"
               accessibilityState={{ selected: sort === s.key }}
-              onPress={() => setSort(s.key)}
+              onPress={() => {
+                if (sort !== s.key) hapticSelection();
+                setSort(s.key);
+              }}
               style={[styles.sortChip, sort === s.key && styles.sortChipActive]}
             >
               <Text style={[styles.sortChipText, sort === s.key && styles.sortChipTextActive]}>
@@ -233,8 +238,10 @@ export default function FindDoctorsScreen() {
           data={items}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
-          renderItem={({ item }) => (
-            <DoctorCard doctor={item} onPress={() => router.push(`/doctor/${item.id}`)} />
+          renderItem={({ item, index }) => (
+            <AnimatedEntrance index={index}>
+              <DoctorCard doctor={item} onPress={() => router.push(`/doctor/${item.id}`)} />
+            </AnimatedEntrance>
           )}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#4D9FDE" />
@@ -276,21 +283,32 @@ function FilterChip({
   active: boolean;
   onPress: () => void;
 }) {
+  const handlePress = () => {
+    if (!active) hapticSelection();
+    onPress();
+  };
   return (
-    <Pressable
-      accessibilityRole="button"
+    <AnimatedChip
+      active={active}
+      bg={[colors.glass.chip, colors.interactive.selectedBg]}
+      border={[colors.glass.border, colors.interactive.selectedBorder]}
+      onPress={handlePress}
       accessibilityState={{ selected: active }}
-      onPress={onPress}
-      style={[styles.chip, active && styles.chipActive]}
+      style={styles.chip}
     >
       <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
-    </Pressable>
+    </AnimatedChip>
   );
 }
 
 function DoctorCard({ doctor, onPress }: { doctor: DoctorSummary; onPress: () => void }) {
   return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={styles.cardWrap}>
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      android_ripple={{ color: colors.ripple, borderless: false, foreground: true }}
+      style={({ pressed }) => [styles.cardWrap, pressed && styles.cardWrapPressed]}
+    >
       <GlassCard padded style={styles.card}>
         <View style={styles.cardTop}>
           <Avatar name={doctor.fullName} size={52} />
@@ -341,17 +359,10 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingRight: spacing.base,
   },
+  // chip keeps structure only — bg/border crossfade in AnimatedChip.
   chip: {
-    backgroundColor: colors.glass.chip,
-    borderRadius: radii.chip,
-    borderWidth: 1,
-    borderColor: colors.glass.border,
     paddingHorizontal: spacing.base,
     paddingVertical: spacing.sm - 2,
-  },
-  chipActive: {
-    backgroundColor: 'rgba(77, 159, 222, 0.28)',
-    borderColor: 'rgba(77, 159, 222, 0.55)',
   },
   chipText: {
     ...typography.caption,
@@ -359,7 +370,7 @@ const styles = StyleSheet.create({
   },
   chipTextActive: {
     ...typography.captionSemi,
-    color: '#2D6FB4',
+    color: colors.interactive.selectedFg,
   },
   sortRow: {
     flexDirection: 'row',
@@ -388,12 +399,17 @@ const styles = StyleSheet.create({
   list: {
     paddingHorizontal: spacing.base,
     paddingTop: spacing.sm,
-    paddingBottom: spacing.xl,
+    // Absolute tab bar (~48px + safe inset): single inset (GlassScreen), this
+    // padding clears the bar — verified, no double inset.
+    paddingBottom: spacing.huge,
     gap: spacing.md,
   },
   cardWrap: {
     borderRadius: radii.card,
     overflow: 'hidden', // FIX A: ripple + card content clip to the rounded shape
+  },
+  cardWrapPressed: {
+    opacity: 0.9,
   },
   card: {},
   cardTop: {

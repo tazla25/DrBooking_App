@@ -2,9 +2,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   ActivityIndicator,
+  Pressable,
   StyleSheet,
   Text,
-  TouchableOpacity,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
@@ -26,7 +26,8 @@ interface PrimaryButtonProps {
  * Primary CTA — rounded-rect (radius 16) with the light-blue gradient
  * (#6EC1F5 → #4D9FDE), white semibold text and a soft blue glow shadow.
  * `tone="destructive"` swaps to the red gradient for confirmations such as
- * cancelling a booking. Pressed / loading / disabled states included.
+ * cancelling a booking. Phase 10-c: Pressable with a subtle press-scale
+ * (0.98); pressed / loading / disabled states included.
  */
 export function PrimaryButton({
   label,
@@ -44,13 +45,16 @@ export function PrimaryButton({
       : [colors.ctaGradient.start, colors.ctaGradient.end];
 
   return (
-    <TouchableOpacity
+    <Pressable
       accessibilityRole="button"
       accessibilityState={{ disabled: inactive, busy: loading }}
       disabled={inactive}
       onPress={onPress}
-      activeOpacity={0.85}
-      style={[inactive ? styles.disabledWrap : styles.wrap, style]}
+      style={({ pressed }) => [
+        inactive ? styles.disabledWrap : styles.wrap,
+        pressed && styles.wrapPressed,
+        style,
+      ]}
     >
       <LinearGradient
         colors={inactive ? ['#B9D8EF', '#B9D8EF'] : activeColors}
@@ -69,7 +73,7 @@ export function PrimaryButton({
           </>
         )}
       </LinearGradient>
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 
@@ -77,6 +81,9 @@ const styles = StyleSheet.create({
   wrap: {
     borderRadius: radii.button,
     ...colors.shadow.ctaGlow,
+  },
+  wrapPressed: {
+    transform: [{ scale: 0.98 }],
   },
   disabledWrap: {
     borderRadius: radii.button,

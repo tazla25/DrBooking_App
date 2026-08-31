@@ -20,6 +20,8 @@ import {
   GlassTextField,
 } from '@/components';
 import { useAuditLog } from '@/hooks/useAuditLog';
+import { hapticSelection } from '@/lib/haptics';
+import { AnimatedChip } from '@/components/motion';
 import { AUDIT_ACTIONS, parseAuditDetail, type AuditLogEntry } from '@/lib/admin';
 import { formatISTTimestamp } from '@/lib/format';
 import { colors, radii, spacing, typography } from '@/theme';
@@ -39,26 +41,26 @@ const ACTION_META: Record<
 > = {
   DOCTOR_VERIFIED: {
     label: 'Doctor verified',
-    color: '#2E7D5B',
-    bg: 'rgba(61, 178, 115, 0.18)',
+    color: colors.status.CONFIRMED.fg,
+    bg: colors.status.CONFIRMED.bg,
     icon: 'shield-checkmark-outline',
   },
   DOCTOR_REJECTED: {
     label: 'Doctor rejected',
-    color: '#B94A4A',
-    bg: 'rgba(226, 85, 85, 0.16)',
+    color: colors.status.CANCELLED.fg,
+    bg: colors.status.CANCELLED.bg,
     icon: 'close-circle-outline',
   },
   APPOINTMENT_CANCELLED: {
     label: 'Appointment cancelled',
-    color: '#B27415',
-    bg: 'rgba(245, 166, 35, 0.20)',
+    color: colors.status.PENDING.fg,
+    bg: colors.status.PENDING.bg,
     icon: 'calendar-outline',
   },
   APPOINTMENT_NO_SHOW: {
     label: 'No-show recorded',
-    color: '#5F6B80',
-    bg: 'rgba(138, 147, 166, 0.20)',
+    color: colors.status.NO_SHOW.fg,
+    bg: colors.status.NO_SHOW.bg,
     icon: 'eye-off-outline',
   },
 };
@@ -174,14 +176,20 @@ function FilterChip({
   onPress: () => void;
 }) {
   return (
-    <Pressable
-      accessibilityRole="button"
+    <AnimatedChip
+      active={active}
+      bg={[colors.glass.chip, colors.interactive.selectedBg]}
+      border={[colors.glass.border, colors.interactive.selectedBorder]}
+      onPress={() => {
+        if (!active) hapticSelection();
+        onPress();
+      }}
       accessibilityLabel={`Filter ${label}`}
-      onPress={onPress}
-      style={[styles.filterChip, active && styles.filterChipSelected]}
+      accessibilityState={{ selected: active }}
+      style={styles.filterChip}
     >
       <Text style={[styles.filterChipText, active && styles.filterChipTextSelected]}>{label}</Text>
-    </Pressable>
+    </AnimatedChip>
   );
 }
 
@@ -231,7 +239,8 @@ function AuditRow({ entry }: { entry: AuditLogEntry }) {
               <Pressable
                 accessibilityRole="button"
                 onPress={() => setExpanded((v) => !v)}
-                hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                style={({ pressed }) => pressed && styles.detailTogglePressed}
               >
                 <Text style={styles.detailToggle}>{expanded ? 'Less' : 'More'}</Text>
               </Pressable>
@@ -277,17 +286,10 @@ const styles = StyleSheet.create({
   filterChip: {
     paddingHorizontal: spacing.md,
     paddingVertical: 6,
-    borderRadius: radii.chip,
-    backgroundColor: colors.glass.chip,
-    borderWidth: 1,
-    borderColor: colors.glass.border,
-  },
-  filterChipSelected: {
-    backgroundColor: 'rgba(77, 159, 222, 0.20)',
-    borderColor: colors.ctaGradient.end,
   },
   filterChipText: { ...typography.captionSemi, color: colors.text.secondary },
-  filterChipTextSelected: { color: '#2D6FB4' },
+  filterChipTextSelected: { color: colors.interactive.selectedFg },
+  detailTogglePressed: { opacity: 0.6 },
   listContent: {
     padding: spacing.base,
     paddingTop: spacing.sm,

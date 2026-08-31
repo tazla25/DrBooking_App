@@ -304,7 +304,7 @@ const styles = StyleSheet.create({
   scheduleCard: { gap: spacing.xs + 2 },
   scheduleHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   scheduleDay: { ...typography.h3, color: colors.text.primary },
-  scheduleTime: { ...typography.bodySemi, color: '#2D6FB4' },
+  scheduleTime: { ...typography.bodySemi, color: colors.status.CALLED.fg },
   clinic: { ...typography.bodySemi, color: colors.text.primary, marginTop: 2 },
   address: { ...typography.caption, color: colors.text.secondary },
   scheduleFoot: {
@@ -314,7 +314,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   pin: { ...typography.caption, color: colors.text.secondary },
-  mapLink: { ...typography.captionSemi, color: '#2D6FB4' },
+  mapLink: { ...typography.captionSemi, color: colors.status.CALLED.fg },
   emptyText: { ...typography.body, color: colors.text.secondary, textAlign: 'center' },
   overrideCard: { padding: spacing.md },
   overrideRow: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start' },

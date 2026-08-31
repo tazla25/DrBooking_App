@@ -75,7 +75,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   largeText: {
-    fontSize: 13,
-    lineHeight: 18,
+    ...typography.caption, // 13/18 — token, not literal
   },
 });

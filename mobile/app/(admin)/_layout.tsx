@@ -2,8 +2,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { Redirect, Tabs } from 'expo-router';
 import { BlurView } from 'expo-blur';
 import { StyleSheet } from 'react-native';
+import { hapticSelection } from '@/lib/haptics';
 import { useAuthStore } from '@/store/auth';
-import { colors } from '@/theme';
+import { colors, typography } from '@/theme';
 
 /**
  * SUPER_ADMIN console (Phase 8) — tabbed panel mirroring (staff)/_layout.tsx.
@@ -27,11 +28,12 @@ export default function AdminLayout() {
 
   return (
     <Tabs
+      screenListeners={{ tabPress: () => hapticSelection() }}
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.ctaGradient.end,
         tabBarInactiveTintColor: colors.text.secondary,
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+        tabBarLabelStyle: { ...typography.micro },
         tabBarStyle: {
           position: 'absolute',
           backgroundColor: colors.glass.tabBar, // Phase 10 token (0.55)

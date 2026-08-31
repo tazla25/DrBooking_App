@@ -259,7 +259,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
   },
-  importantChipText: { ...typography.micro, color: '#B27415', letterSpacing: 0.4 },
+  importantChipText: {
+    ...typography.micro,
+    color: colors.status.PENDING.fg,
+    letterSpacing: 0.4,
+  },
   date: { ...typography.micro, color: colors.text.secondary, marginLeft: 'auto' },
   noteText: { ...typography.body, color: colors.text.primary },
   authorRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },

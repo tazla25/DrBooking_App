@@ -149,7 +149,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: 4,
   },
-  roleChipText: { ...typography.micro, color: '#2D6FB4', letterSpacing: 0.4 },
+  roleChipText: {
+    ...typography.micro,
+    color: colors.status.CALLED.fg,
+    letterSpacing: 0.4,
+  },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   metaText: { ...typography.caption, color: colors.text.secondary, flexShrink: 1 },
   sectionTitle: { ...typography.h3, color: colors.text.primary },

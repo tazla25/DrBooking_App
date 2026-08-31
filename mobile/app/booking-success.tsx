@@ -1,9 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { GlassButton, GlassCard, GlassHeader, GlassScreen, PrimaryButton } from '@/components';
 import { formatDateISO } from '@/lib/format';
-import { colors, spacing, typography } from '@/theme';
+import { hapticSuccess } from '@/lib/haptics';
+import { colors, radii, spacing, typography } from '@/theme';
 
 /**
  * Booking success — the confirmation the spec asks for: big token number,
@@ -30,6 +32,12 @@ export default function BookingSuccessScreen() {
   const estWaitMin = Number(params.estWaitMin ?? '0');
   const time =
     params.startTime && params.endTime ? `${params.startTime} – ${params.endTime}` : null;
+
+  // The "booking success" moment — one light success haptic (never on the
+  // failure path: this screen is only reached after a 201).
+  useEffect(() => {
+    hapticSuccess();
+  }, []);
 
   return (
     <GlassScreen>
@@ -92,7 +100,7 @@ const styles = StyleSheet.create({
   checkCircle: {
     width: 64,
     height: 64,
-    borderRadius: 32,
+    borderRadius: radii.round, // true circle — token, not literal
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(59, 178, 115, 0.16)',
@@ -123,7 +131,7 @@ const styles = StyleSheet.create({
   },
   token: {
     ...typography.display,
-    color: '#2D6FB4',
+    color: colors.status.CALLED.fg,
     fontWeight: '800',
   },
   waitHint: { ...typography.caption, color: colors.text.secondary, textAlign: 'center' },

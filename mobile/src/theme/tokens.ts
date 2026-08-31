@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 /**
  * Design tokens — "glassmorphism pastel blue-purple" (mandatory system from Phase 5 on).
  *
@@ -63,6 +65,20 @@ export const colors = {
 
   /** Modal backdrop dim (paired with the expo-blur BlurView in GlassModal). */
   modalBackdrop: 'rgba(22, 33, 58, 0.60)',
+
+  /** Android ripple tint for every tappable list/content surface (Phase 10-c). */
+  ripple: 'rgba(23, 38, 74, 0.18)',
+
+  /**
+   * Interactive selection tint — the chip "active" pair + selected text
+   * (filters, sort chips, analytics windows, audit filters). Reused by every
+   * selected chip so selection always looks identical app-wide.
+   */
+  interactive: {
+    selectedBg: 'rgba(77, 159, 222, 0.28)',
+    selectedBorder: 'rgba(77, 159, 222, 0.55)',
+    selectedFg: '#2D6FB4',
+  } as const,
 
   navy: '#16213A', // dark pill secondary button
   destructive: '#E25555',
@@ -133,17 +149,78 @@ export const radii = {
   round: 999,
 } as const;
 
-/** Typography scale — weights map onto the platform system font. */
+/**
+ * Font families — Inter static weights (SIL OFL 1.1, see
+ * assets/fonts/Inter-OFL.txt), loaded via expo-font in app/_layout.tsx while
+ * the splash stays visible (no font flash). If a family fails to load,
+ * React Native silently falls back to the platform system font. Per-screen
+ * fontFamily literals are FORBIDDEN — consume this token (or a typography
+ * token, which all carry fontFamily) instead.
+ */
+export const fontFamily = {
+  regular: 'Inter-Regular',
+  semiBold: 'Inter-SemiBold',
+  bold: 'Inter-Bold',
+  /** One-time passwords / codes — platform monospace by design. */
+  mono: Platform.select({ ios: 'Courier', android: 'monospace' }),
+} as const;
+
+/** Typography scale — Inter weights via the fontFamily token above. */
 export const typography = {
-  display: { fontSize: 34, lineHeight: 41, fontWeight: '700' as const },
-  h1: { fontSize: 28, lineHeight: 34, fontWeight: '700' as const },
-  h2: { fontSize: 20, lineHeight: 26, fontWeight: '600' as const },
-  h3: { fontSize: 17, lineHeight: 23, fontWeight: '600' as const },
-  body: { fontSize: 16, lineHeight: 22, fontWeight: '400' as const },
-  bodySemi: { fontSize: 16, lineHeight: 22, fontWeight: '600' as const },
-  caption: { fontSize: 13, lineHeight: 18, fontWeight: '400' as const },
-  captionSemi: { fontSize: 13, lineHeight: 18, fontWeight: '600' as const },
-  micro: { fontSize: 11, lineHeight: 15, fontWeight: '600' as const },
+  display: {
+    fontFamily: fontFamily.bold,
+    fontSize: 34,
+    lineHeight: 41,
+    fontWeight: '700' as const,
+  },
+  h1: {
+    fontFamily: fontFamily.bold,
+    fontSize: 28,
+    lineHeight: 34,
+    fontWeight: '700' as const,
+  },
+  h2: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 20,
+    lineHeight: 26,
+    fontWeight: '600' as const,
+  },
+  h3: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 17,
+    lineHeight: 23,
+    fontWeight: '600' as const,
+  },
+  body: {
+    fontFamily: fontFamily.regular,
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '400' as const,
+  },
+  bodySemi: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '600' as const,
+  },
+  caption: {
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '400' as const,
+  },
+  captionSemi: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '600' as const,
+  },
+  micro: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '600' as const,
+  },
 } as const;
 
 export type TypographyToken = keyof typeof typography;

@@ -46,6 +46,8 @@ import {
   type ScheduleFormValues,
 } from '@/lib/validation';
 import { useSchedules } from '@/hooks/useSchedules';
+import { hapticSelection, hapticSuccess, hapticWarning } from '@/lib/haptics';
+import { AnimatedChip } from '@/components/motion';
 import { colors, radii, spacing, typography } from '@/theme';
 
 const DAY_CHIPS = [0, 1, 2, 3, 4, 5, 6];
@@ -54,9 +56,21 @@ const OVERRIDE_DATES_AHEAD = 14;
 const OVERRIDE_TYPES: OverrideTypeValue[] = ['CLOSED', 'MODIFIED_HOURS', 'SPECIAL'];
 
 const OVERRIDE_TYPE_META: Record<string, { label: string; color: string; bg: string }> = {
-  CLOSED: { label: 'Closed', color: '#B94A4A', bg: 'rgba(226, 85, 85, 0.16)' },
-  MODIFIED_HOURS: { label: 'Modified hours', color: '#2D6FB4', bg: 'rgba(77, 159, 222, 0.20)' },
-  SPECIAL: { label: 'Special hours', color: '#B27415', bg: 'rgba(245, 166, 35, 0.20)' },
+  CLOSED: {
+    label: 'Closed',
+    color: colors.status.CANCELLED.fg,
+    bg: colors.status.CANCELLED.bg,
+  },
+  MODIFIED_HOURS: {
+    label: 'Modified hours',
+    color: colors.status.CALLED.fg,
+    bg: colors.status.CALLED.bg,
+  },
+  SPECIAL: {
+    label: 'Special hours',
+    color: colors.status.PENDING.fg,
+    bg: colors.status.PENDING.bg,
+  },
 };
 
 /**
@@ -84,6 +98,7 @@ export default function StaffSchedulesScreen() {
     try {
       await deactivateSchedule(deactivateTarget.id);
       setDeactivateTarget(null);
+      hapticWarning(); // destructive confirmation
       show('Schedule deactivated — history is kept', 'success');
       await list.refresh();
     } catch (err) {
@@ -165,6 +180,7 @@ export default function StaffSchedulesScreen() {
         onClose={() => setFormTarget(null)}
         onSaved={async (created) => {
           setFormTarget(null);
+          hapticSuccess();
           show(created ? 'Schedule created' : 'Schedule updated', 'success');
           await list.refresh();
         }}
@@ -411,17 +427,24 @@ function ScheduleFormModal({
           {DAY_CHIPS.map((day) => {
             const selected = form.dayOfWeek === day;
             return (
-              <Pressable
+              <AnimatedChip
                 key={day}
-                accessibilityRole="button"
+                active={selected}
+                bg={[colors.glass.nested, colors.ctaGradient.end]}
+                border={[colors.glass.border, colors.ctaGradient.end]}
+                radius={radii.field}
+                onPress={() => {
+                  if (!selected) hapticSelection();
+                  setForm((f) => ({ ...f, dayOfWeek: day }));
+                }}
                 accessibilityLabel={dayName(day)}
-                onPress={() => setForm((f) => ({ ...f, dayOfWeek: day }))}
-                style={[styles.dayChip, selected && styles.dayChipSelected]}
+                accessibilityState={{ selected }}
+                style={styles.dayChip}
               >
                 <Text style={[styles.dayChipText, selected && styles.dayChipTextSelected]}>
                   {dayName(day, true)}
                 </Text>
-              </Pressable>
+              </AnimatedChip>
             );
           })}
         </View>
@@ -682,6 +705,7 @@ function OverridesModal({
                     accessibilityLabel={`Delete override for ${formatDateISO(o.date)}`}
                     disabled={deletingDate === o.date}
                     onPress={() => void remove(o.date)}
+                    style={({ pressed }) => pressed && styles.deleteIconPressed}
                     hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                   >
                     <Ionicons
@@ -712,22 +736,22 @@ function OverridesModal({
               const selected = form.type === type;
               const meta = OVERRIDE_TYPE_META[type];
               return (
-                <Pressable
+                <AnimatedChip
                   key={type}
-                  accessibilityRole="button"
-                  onPress={() => setForm((f) => overrideTypeSelected(f, type))}
-                  style={[
-                    styles.typeChip,
-                    selected && {
-                      backgroundColor: meta.bg,
-                      borderColor: meta.color,
-                    },
-                  ]}
+                  active={selected}
+                  bg={[colors.glass.nested, meta.bg]}
+                  border={[colors.glass.border, meta.color]}
+                  radius={radii.field}
+                  onPress={() => {
+                    if (!selected) hapticSelection();
+                    setForm((f) => overrideTypeSelected(f, type));
+                  }}
+                  style={styles.typeChip}
                 >
                   <Text style={[styles.typeChipText, selected && { color: meta.color }]}>
                     {meta.label}
                   </Text>
-                </Pressable>
+                </AnimatedChip>
               );
             })}
           </View>
@@ -742,12 +766,19 @@ function OverridesModal({
             {dateChips.map((date) => {
               const selected = form.date === date;
               return (
-                <Pressable
+                <AnimatedChip
                   key={date}
-                  accessibilityRole="button"
+                  active={selected}
+                  bg={[colors.glass.nested, colors.ctaGradient.end]}
+                  border={[colors.glass.border, colors.ctaGradient.end]}
+                  radius={radii.inner}
+                  onPress={() => {
+                    if (!selected) hapticSelection();
+                    setForm((f) => ({ ...f, date }));
+                  }}
                   accessibilityLabel={formatDateISO(date)}
-                  onPress={() => setForm((f) => ({ ...f, date }))}
-                  style={[styles.dateChip2, selected && styles.dateChip2Selected]}
+                  accessibilityState={{ selected }}
+                  style={styles.dateChip2}
                 >
                   <Text style={[styles.dateChipDay, selected && styles.dateChipTextSelected]}>
                     {date === istTodayISO()
@@ -757,7 +788,7 @@ function OverridesModal({
                   <Text style={[styles.dateChipNum, selected && styles.dateChipTextSelected]}>
                     {formatDateISO(date).slice(0, 6)}
                   </Text>
-                </Pressable>
+                </AnimatedChip>
               );
             })}
           </ScrollView>
@@ -852,7 +883,8 @@ const styles = StyleSheet.create({
   metaDot: { ...typography.caption, color: colors.text.secondary },
   chipRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
   cardActions: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap', marginTop: spacing.xs },
-  cardBtn: { minHeight: 38, paddingHorizontal: spacing.lg },
+  cardBtn: { minHeight: 44, paddingHorizontal: spacing.lg },
+  deleteIconPressed: { opacity: 0.6 },
 
   inactiveChip: {
     backgroundColor: 'rgba(138, 147, 166, 0.20)',
@@ -862,7 +894,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
   },
-  inactiveChipText: { ...typography.micro, color: '#5F6B80', letterSpacing: 0.4 },
+  inactiveChipText: {
+    ...typography.micro,
+    color: colors.status.NO_SHOW.fg,
+    letterSpacing: 0.4,
+  },
 
   queueChip: {
     backgroundColor: 'rgba(61, 178, 115, 0.18)',
@@ -872,7 +908,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
   },
-  queueChipText: { ...typography.micro, color: '#2E7D5B', letterSpacing: 0.4 },
+  queueChipText: {
+    ...typography.micro,
+    color: colors.status.CONFIRMED.fg,
+    letterSpacing: 0.4,
+  },
 
   overrideChip: {
     borderRadius: radii.chip,
@@ -896,17 +936,11 @@ const styles = StyleSheet.create({
   },
 
   dayChips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  // dayChip/typeChip/dateChip2 keep structure only — bg/border crossfade
+  // in AnimatedChip (Phase 10-c motion).
   dayChip: {
-    backgroundColor: colors.glass.nested,
-    borderRadius: radii.field,
-    borderWidth: 1,
-    borderColor: colors.glass.border,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-  },
-  dayChipSelected: {
-    backgroundColor: colors.ctaGradient.end,
-    borderColor: colors.ctaGradient.end,
   },
   dayChipText: { ...typography.captionSemi, color: colors.text.primary },
   dayChipTextSelected: { color: colors.white },
@@ -925,10 +959,6 @@ const styles = StyleSheet.create({
 
   typeChips: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
   typeChip: {
-    backgroundColor: colors.glass.nested,
-    borderRadius: radii.field,
-    borderWidth: 1,
-    borderColor: colors.glass.border,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
@@ -938,17 +968,9 @@ const styles = StyleSheet.create({
   dateChip2: {
     alignItems: 'center',
     gap: spacing.xs,
-    backgroundColor: colors.glass.nested,
-    borderRadius: radii.inner,
-    borderWidth: 1,
-    borderColor: colors.glass.border,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     minWidth: 58,
-  },
-  dateChip2Selected: {
-    backgroundColor: colors.ctaGradient.end,
-    borderColor: colors.ctaGradient.end,
   },
   dateChipDay: { ...typography.micro, color: colors.text.secondary },
   dateChipNum: { ...typography.bodySemi, color: colors.text.primary },

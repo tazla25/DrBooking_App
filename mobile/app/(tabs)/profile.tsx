@@ -135,6 +135,8 @@ const styles = StyleSheet.create({
   body: {
     flex: 1,
     padding: spacing.base,
+    // Absolute tab bar clearance (verified — single inset, no double).
+    paddingBottom: spacing.huge,
     gap: spacing.base,
   },
   card: { gap: spacing.base },

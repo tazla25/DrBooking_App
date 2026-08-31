@@ -53,7 +53,7 @@ export function useToast(durationMs = 2600) {
 // ---------------------------------------------------------------------------
 
 const TONE_META = {
-  info: { icon: 'information-circle', color: '#2D6FB4' },
+  info: { icon: 'information-circle', color: colors.status.CALLED.fg },
   success: { icon: 'checkmark-circle', color: colors.success },
   error: { icon: 'alert-circle', color: colors.destructive },
 } as const;

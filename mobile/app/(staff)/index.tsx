@@ -27,6 +27,7 @@ import {
   type AppointmentStatus,
 } from '@/components';
 import { api } from '@/lib/api';
+import { hapticSelection, hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { ApiError, toFriendlyMessage } from '@/lib/errors';
 import { formatDateISO, formatFee } from '@/lib/format';
 import {
@@ -52,6 +53,7 @@ import {
 } from '@/lib/validation';
 import { useTodayQueue } from '@/hooks/useTodayQueue';
 import { useAuthStore } from '@/store/auth';
+import { AnimatedChip, AnimatedEntrance, PulseView, useChangePulse } from '@/components/motion';
 import { colors, radii, spacing, typography } from '@/theme';
 
 /** Date strip window: 3 days back … 7 days forward, IST today centered. */
@@ -151,6 +153,7 @@ export default function StaffTodayScreen() {
     setAdvancing(true);
     try {
       const result = await callNextPatient();
+      if (!result.queueEmpty) hapticSuccess(); // a patient was actually called
       show(queueNextMessage(result), result.queueEmpty ? 'info' : 'success');
       await queue.refresh();
     } catch (err) {
@@ -172,6 +175,12 @@ export default function StaffTodayScreen() {
     setMutating(`${appointment.id}:${status}`);
     try {
       await setAppointmentStatus(appointment.id, status);
+      // Call/Complete are positive confirmations; Cancel/No-show are warnings.
+      if (status === 'CALLED' || status === 'COMPLETED') {
+        hapticSuccess();
+      } else {
+        hapticWarning();
+      }
       show(`#${appointment.queueNumber} marked ${labelForStatus(status)}`, 'success');
       await queue.refresh();
       return true;
@@ -296,8 +305,10 @@ export default function StaffTodayScreen() {
     addDaysISO(istToday, i - DATE_STRIP_BACK),
   );
 
-  const renderItem = ({ item }: { item: StaffQueueAppointment }) => (
-    <QueueRow appointment={item} mutatingId={mutating} onAction={onRowAction} />
+  const renderItem = ({ item, index }: { item: StaffQueueAppointment; index: number }) => (
+    <AnimatedEntrance index={index}>
+      <QueueRow appointment={item} mutatingId={mutating} onAction={onRowAction} />
+    </AnimatedEntrance>
   );
 
   return (
@@ -372,12 +383,18 @@ export default function StaffTodayScreen() {
                     {stripDates.map((date) => {
                       const selected = date === selectedDate;
                       return (
-                        <Pressable
+                        <AnimatedChip
                           key={date}
-                          accessibilityRole="button"
+                          active={selected}
+                          bg={[colors.glass.chip, colors.ctaGradient.end]}
+                          border={[colors.glass.border, colors.ctaGradient.end]}
+                          onPress={() => {
+                            if (date !== selectedDate) hapticSelection();
+                            setSelectedDate(date);
+                          }}
                           accessibilityLabel={`View ${formatDateISO(date)}`}
-                          onPress={() => setSelectedDate(date)}
-                          style={[styles.dateChip, selected && styles.dateChipSelected]}
+                          accessibilityState={{ selected }}
+                          style={styles.dateChip}
                         >
                           <Text
                             style={[styles.dateChipDay, selected && styles.dateChipTextSelected]}
@@ -389,7 +406,7 @@ export default function StaffTodayScreen() {
                           >
                             {date.slice(8, 10)}
                           </Text>
-                        </Pressable>
+                        </AnimatedChip>
                       );
                     })}
                   </ScrollView>
@@ -509,11 +526,16 @@ export default function StaffTodayScreen() {
               {walkInSchedules.map((s) => {
                 const selected = s.id === walkInScheduleId;
                 return (
-                  <Pressable
+                  <AnimatedChip
                     key={s.id}
-                    accessibilityRole="button"
-                    onPress={() => setWalkInScheduleId(s.id)}
-                    style={[styles.scheduleChip, selected && styles.scheduleChipSelected]}
+                    active={selected}
+                    bg={[colors.glass.chip, colors.ctaGradient.end]}
+                    border={[colors.glass.border, colors.ctaGradient.end]}
+                    onPress={() => {
+                      if (s.id !== walkInScheduleId) hapticSelection();
+                      setWalkInScheduleId(s.id);
+                    }}
+                    style={styles.scheduleChip}
                   >
                     <Text
                       style={[styles.scheduleChipText, selected && styles.scheduleChipTextSelected]}
@@ -521,7 +543,7 @@ export default function StaffTodayScreen() {
                     >
                       {s.startTime}–{s.endTime} · {s.clinicName}
                     </Text>
-                  </Pressable>
+                  </AnimatedChip>
                 );
               })}
             </View>
@@ -601,8 +623,13 @@ function QueueRow({
   const nowServing = appointment.status === 'CALLED';
   const actions = STATUS_TRANSITIONS[appointment.status] ?? [];
 
+  // Live-change highlight: pulse exactly when this row TRANSITIONS to CALLED
+  // (the "Now serving" moment on the staff console).
+  const calledPulse = useChangePulse(appointment.status, nowServing);
+
   return (
     <GlassCard padded style={[styles.card, nowServing && styles.nowServingCard]}>
+      <PulseView pulse={calledPulse} />
       <View style={styles.rowTop}>
         <View style={styles.tokenCircle}>
           <Text style={styles.tokenNum}>#{appointment.queueNumber}</Text>
@@ -628,7 +655,7 @@ function QueueRow({
             accessibilityRole="button"
             accessibilityLabel="Toggle note"
             onPress={() => setNotesOpen((v) => !v)}
-            style={styles.notesButton}
+            style={({ pressed }) => [styles.notesButton, pressed && styles.notesButtonPressed]}
             hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
           >
             <Ionicons
@@ -739,17 +766,9 @@ const styles = StyleSheet.create({
   dateChip: {
     alignItems: 'center',
     gap: spacing.xs,
-    backgroundColor: colors.glass.chip, // C3: date chips follow the chip law (12)
-    borderRadius: radii.chip,
-    borderWidth: 1,
-    borderColor: colors.glass.border,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     minWidth: 58,
-  },
-  dateChipSelected: {
-    backgroundColor: colors.ctaGradient.end,
-    borderColor: colors.ctaGradient.end,
   },
   dateChipDay: { ...typography.micro, color: colors.text.secondary },
   dateChipNum: { ...typography.bodySemi, color: colors.text.primary },
@@ -772,7 +791,7 @@ const styles = StyleSheet.create({
   tokenCircle: {
     width: 46,
     height: 46,
-    borderRadius: 23,
+    borderRadius: radii.round, // true circle — token, not literal
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.glass.nested,
@@ -795,10 +814,11 @@ const styles = StyleSheet.create({
   metaText: { ...typography.caption, color: colors.text.secondary },
   metaDot: { ...typography.caption, color: colors.text.secondary },
   notesButton: { marginLeft: 'auto', padding: spacing.xs },
+  notesButtonPressed: { opacity: 0.6 },
   notesCard: { padding: spacing.md },
   notesText: { ...typography.caption, color: colors.text.primary },
   rowActions: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
-  rowBtn: { minHeight: 38, paddingHorizontal: spacing.lg },
+  rowBtn: { minHeight: 44, paddingHorizontal: spacing.lg },
 
   sourceChip: {
     backgroundColor: 'rgba(245, 166, 35, 0.18)',
@@ -810,7 +830,7 @@ const styles = StyleSheet.create({
   },
   sourceChipText: {
     ...typography.micro,
-    color: '#B27415',
+    color: colors.status.PENDING.fg,
     letterSpacing: 0.4,
   },
 
@@ -823,16 +843,8 @@ const styles = StyleSheet.create({
   walkInNone: { ...typography.body, color: colors.text.secondary, textAlign: 'center' },
   scheduleChips: { gap: spacing.sm },
   scheduleChip: {
-    backgroundColor: colors.glass.chip, // C3: schedule chips follow the chip law (12)
-    borderRadius: radii.chip,
-    borderWidth: 1,
-    borderColor: colors.glass.border,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-  },
-  scheduleChipSelected: {
-    backgroundColor: colors.ctaGradient.end,
-    borderColor: colors.ctaGradient.end,
   },
   scheduleChipText: { ...typography.captionSemi, color: colors.text.primary },
   scheduleChipTextSelected: { color: colors.white },

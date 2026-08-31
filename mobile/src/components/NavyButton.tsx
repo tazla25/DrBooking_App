@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet, Text, TouchableOpacity, type ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, Text, type ViewStyle } from 'react-native';
 import { colors, radii, spacing, typography } from '@/theme';
 
 interface NavyButtonProps {
@@ -11,20 +11,27 @@ interface NavyButtonProps {
   style?: ViewStyle;
 }
 
-/** Dark navy rounded-rect (#16213A, radius 16) with white text — compact secondary action. */
+/**
+ * Dark navy pill (#16213A) with white text — compact secondary action.
+ * Phase 10-c: Pressable with a visible pressed state (opacity 0.85).
+ */
 export function NavyButton({ label, onPress, icon, disabled = false, style }: NavyButtonProps) {
   return (
-    <TouchableOpacity
+    <Pressable
       accessibilityRole="button"
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
-      activeOpacity={0.85}
-      style={[styles.button, disabled && styles.disabled, style]}
+      style={({ pressed }) => [
+        styles.button,
+        pressed && styles.pressed,
+        disabled && styles.disabled,
+        style,
+      ]}
     >
       {icon ? <Ionicons name={icon} size={17} color={colors.white} style={styles.icon} /> : null}
       <Text style={styles.label}>{label}</Text>
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 
@@ -38,6 +45,9 @@ const styles = StyleSheet.create({
     borderRadius: radii.button,
     backgroundColor: colors.navy,
     paddingHorizontal: spacing.xl,
+  },
+  pressed: {
+    opacity: 0.85,
   },
   disabled: {
     opacity: 0.55,
