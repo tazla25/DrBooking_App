@@ -335,11 +335,9 @@ EXPO_TOKEN=<token> npx eas-cli@latest init --non-interactive
 
 - **preview** — `android.buildType: "apk"`, `distribution: "internal"`, and
   `env.EXPO_PUBLIC_API_URL` pinned to the **deployed Vercel API URL**.
-  ⚠️ The committed value is a `REPLACE_WITH_...` placeholder — after the
-  first Vercel deploy, put the real `https://<project>.vercel.app` URL
-  into `eas.json` (or override it at build time with
-  `eas build --profile preview --env EXPO_PUBLIC_API_URL=<url>`) BEFORE
-  building. A build against the placeholder cannot log in.
+  Pinned to the live production API: **https://dr-booking-api.vercel.app** (deployed in Phase 9).
+  To point a one-off build at a different deployment, override at build
+  time: `eas build --profile preview --env EXPO_PUBLIC_API_URL=<url>`.
 - **production** — `android.buildType: "app-bundle"` (Play Store format) +
   `autoIncrement`.
 

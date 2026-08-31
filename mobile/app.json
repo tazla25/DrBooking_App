@@ -45,6 +45,13 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "574f6d43-e3e1-4ee6-9df4-84534239c7cf"
+      }
+    },
+    "owner": "tazla25s-team"
   }
 }

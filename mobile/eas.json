@@ -9,7 +9,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://REPLACE_WITH_VERCEL_API_URL_BEFORE_BUILDING.vercel.app"
+        "EXPO_PUBLIC_API_URL": "https://dr-booking-api.vercel.app"
       }
     },
     "production": {
