@@ -184,6 +184,112 @@ allowed string values live in `api/prisma/schema.prisma`.
 | COMPOUNDER | +91 98765 43220 | `mustChangePassword=true`, delegated to doctor 1 |
 | PATIENT ×5 | +91 98123 45601…605 | sample appointments today |
 
+## Production (Phase 9 — Supabase + Vercel + EAS)
+
+The system runs on three services. Nothing here needs a change to api/ or
+mobile/ code — it is all configuration.
+
+### 1. Database — Supabase Postgres
+
+- Local dev + tests: **SQLite** (`api/prisma/schema.prisma`; jest recreates
+  `api/db/test.db` every run). Production: **Supabase Postgres** via
+  `api/prisma/schema.postgres.prisma` — a GENERATED copy (provider
+  postgresql + `directUrl`), drift-checked byte-for-byte by
+  `api/tests/schema-sync.test.ts`. Regenerate with
+  `node api/scripts/sync-postgres-schema.mjs` after any schema change.
+- **Which URL goes where** (Supabase → Connect): the **Transaction pooler
+  (port 6543)** becomes `DATABASE_URL` — serverless Vercel functions open
+  many short-lived connections, so runtime must go through pgbouncer
+  (`?pgbouncer=true&connection_limit=1`). The **Session pooler (port 5432)**
+  becomes `DIRECT_URL` — `prisma db push` DDL needs a direct session that
+  pgbouncer's transaction mode cannot provide.
+- **One-time migration + production seed** (exact commands, env-override
+  pattern included): see `api/README.md` → "Production: Supabase Postgres
+  migration". The production seed creates ONLY the SUPER_ADMIN bootstrap
+  account (`SEED_PROFILE=production`) — never dev fixtures.
+
+### 2. API hosting — Vercel
+
+Project settings (dashboard; no `vercel.json` committed):
+
+- **Root Directory**: `api` · Framework: Next.js (auto-detected)
+- **Build Command override**:
+  `npx prisma generate --schema prisma/schema.postgres.prisma && next build`
+- **Install Command**: default (api/ has no lockfile)
+
+Environment variables (Production + Preview), from `api/.env.example`:
+
+| Var | Value |
+| --- | --- |
+| `DATABASE_URL` | transaction pooler URL + `?pgbouncer=true&connection_limit=1` |
+| `DIRECT_URL` | session pooler URL |
+| `DEFAULT_COUNTRY_CODE` | `91` |
+| `RATE_LIMIT_DISABLED` / six `RATE_LIMIT_*` | values from `api/.env.example` |
+| `PUSH_DISABLED` | `0` |
+| `EXPO_ACCESS_TOKEN` | (empty — optional hardening) |
+| `FIREBASE_SERVER_KEY` | (empty — legacy path unused) |
+
+There is deliberately **no JWT secret** — sessions are opaque SHA-256 DB
+tokens (`api/src/lib/auth.ts`); do not invent one.
+
+**Re-deploy:** push/merge to `main` — Vercel auto-deploys (or hit
+"Redeploy"). Verify after every deploy:
+
+```bash
+curl https://<project>.vercel.app/api/doctors                 # envelope ok:true
+# POST /api/auth/login with the SUPER_ADMIN -> ok:true + token
+# GET  /api/admin/pending-doctors with that Bearer token -> ok:true
+```
+
+Record the URL — it becomes `EXPO_PUBLIC_API_URL` in `mobile/eas.json`.
+
+### 3. Mobile builds — EAS (Android)
+
+- One-time: `EXPO_TOKEN=<token> npx eas-cli@latest init --non-interactive`
+  (writes `extra.eas.projectId` into `app.json` — commit it; this is what
+  makes push tokens work in the standalone APK).
+- `mobile/eas.json` profiles: **preview** (installable APK, internal
+  distribution, API URL pinned to the Vercel deployment — replace the
+  placeholder before the first build) and **production** (Play-Store
+  app-bundle, autoIncrement).
+- Full owner runbook — build commands, EAS-managed keystore note, FCM v1
+  push credential setup, and the 6-step on-device walkthrough — lives in
+  `mobile/README.md` → "Production builds (Phase 9)".
+
+### Secrets inventory + rotation
+
+| Secret | Where it lives | Rotation |
+| --- | --- | --- |
+| Supabase DB password (inside both pooler URLs) | Supabase dashboard (reset); Vercel env vars; local `.env` (gitignored) | reset in Supabase → update the two pooler URLs in Vercel → redeploy |
+| Expo access token (`EXPO_TOKEN`) | owner's shell / CI secret only — never in the repo | revoke + re-create at expo.dev → use the new token in the next `eas-cli` command |
+| Firebase service-account JSON (FCM v1) | Expo project credentials (uploaded); file itself stays on the owner's machine | regenerate in Firebase → re-upload to expo.dev credentials |
+| `EXPO_ACCESS_TOKEN` / `FIREBASE_SERVER_KEY` (API) | Vercel env vars — **intentionally empty** | leave empty unless adopting them later |
+
+No JWT secret exists (nothing else to rotate). Secrets NEVER enter git: pooler
+URLs with passwords, EXPO tokens and service-account JSON are all
+gitignored/external by construction, and `mobile/.env*` stays gitignored.
+
+### Backups & recovery
+
+- **Supabase**: daily scheduled backups (Pro: also point-in-time recovery /
+  PITR) — check Database → Backups in the Supabase dashboard for retention
+  and restore. Prisma-level fallback: `pg_dump` the session pooler on the
+  owner's schedule if the free tier's retention is insufficient.
+- **API**: stateless (all state is the DB) — redeploy from git at any time.
+- **Mobile**: the EAS-managed keystore is the irreplaceable asset (app
+  updates for the same package id); inspect it with `npx eas-cli credentials`.
+  It lives in Expo's credential store, never in the repo.
+
+### Installing the APK on clinic devices
+
+1. On the Android phone (8.0+): Settings → Security → allow **Install unknown
+   apps** for the browser/file manager you will use (Chrome or Files).
+2. Open the EAS build URL (from the `eas build` output / expo.dev → Builds)
+   in the phone's browser and download the `.apk`.
+3. Tap the download notification → **Install** → accept the warning
+   (unknown source) → open **Dr Booking**.
+4. Log in with the staff member's phone + password. Updates: repeat with the
+   new APK URL — Android replaces the app in place, data stays.
 ## Roadmap
 
 - **Done — Phase 1 (auth), Phase 2 (doctor/compounder panel), Phase 3 (patient
@@ -196,5 +302,11 @@ allowed string values live in `api/prisma/schema.prisma`.
   management, availability toggle), Phase 8 (mobile SUPER_ADMIN console:
   verification queue, analytics + revenue chart, audit trail, CSV export,
   push deep-links + notification settings, audit polish).**
-- **Next — Phase 9+:** EAS production builds (real-device push verification),
-  Postgres/Supabase migration.
+- **Done — Phase 9 (production launch):** Supabase Postgres migration path
+  (generated + drift-checked `schema.postgres.prisma`, `SEED_PROFILE=production`
+  bootstrap seed), Vercel deploy runbook, EAS build profiles (preview APK +
+  production AAB), FCM v1 push credential setup, on-device walkthrough,
+  handover/secrets/backup docs.**
+- **Next — v1.1 backlog:** `DELETE /api/devices` (push deregistration on
+  logout — see the known limitation in `mobile/README.md`), Redis-backed
+  rate limiting behind a load balancer, Play Store release track.

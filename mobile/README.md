@@ -318,3 +318,89 @@ console — four tabs: Verification · Analytics · Audit · Profile.
   accepts no specialization fields at register (see the Phase 5 PR "API GAP").
 - `router.replace('/login')` after logout does not hard-reset the history
   stack (acceptable for now).
+
+## Production builds (Phase 9 — EAS, Android APK/AAB)
+
+One-time project link (owner, with an Expo access token from
+expo.dev → Account Settings → Access Tokens):
+
+```bash
+cd mobile
+EXPO_TOKEN=<token> npx eas-cli@latest init --non-interactive
+# writes extra.eas.projectId into app.json — commit it. THIS is what makes
+# getExpoPushTokenAsync work in the standalone APK (Expo Go never could).
+```
+
+`eas.json` (committed) defines two profiles:
+
+- **preview** — `android.buildType: "apk"`, `distribution: "internal"`, and
+  `env.EXPO_PUBLIC_API_URL` pinned to the **deployed Vercel API URL**.
+  Pinned to the live production API: **https://dr-booking-api.vercel.app** (deployed in Phase 9).
+  To point a one-off build at a different deployment, override at build
+  time: `eas build --profile preview --env EXPO_PUBLIC_API_URL=<url>`.
+- **production** — `android.buildType: "app-bundle"` (Play Store format) +
+  `autoIncrement`.
+
+```bash
+# Build the installable APK (free tier may queue — watch the printed build URL):
+EXPO_TOKEN=<token> npx eas-cli@latest build -p android --profile preview --non-interactive
+# Accept EAS-managed keystore generation when prompted (first Android build).
+```
+
+**Dependency pins (SDK-blessed):** `react-native-reanimated@4.5.1`,
+`react-native-worklets@0.10.1` and `expo-font@~57.0.2` are declared in
+package.json via `expo install` — the SDK 57 blessed versions. Without the
+pin, peer resolution pulls reanimated 4.6.x → worklets 0.12.x, which
+`expo-modules-core` cannot compile against on Android
+(`WorkletJSCallInvoker.cpp: no member named 'executeSync'`). If you ever
+upgrade Expo SDK versions, re-run `npx expo install --check`.
+
+**Credentials:** the Android keystore is **EAS-managed**. Run
+`npx eas-cli credentials` to inspect it. Never commit the keystore or any
+service-account JSON — secrets never enter git.
+
+### Upgrading / re-releasing
+
+1. Bump `version` (and `androidCode` via autoIncrement) in `app.json`.
+2. `EXPO_TOKEN=<token> npx eas-cli@latest build -p android --profile production`
+   for a Play-Store `.aab` (or `--profile preview` for a fresh APK).
+3. `appVersionSource: "remote"` keeps the version source of truth on EAS.
+
+## Push notifications in production (FCM v1 — owner setup, once)
+
+Standalone-APK push needs an **FCM v1 credential linked to the EAS project**
+(Expo Go needed none of this — that was the Phase 8 caveat). Owner steps:
+
+1. Firebase console → create a project (any name, e.g. "Dr Booking").
+2. Project settings → **Service accounts** → "Generate new private key" →
+   download the JSON. Ensure the **Firebase Cloud Messaging API (V1)** is
+   enabled for the project.
+3. expo.dev dashboard → this project → **Credentials** → Android →
+   **Add Push credentials (FCM V1)** → upload that JSON.
+4. **Never commit the JSON.** (Server side needs NOTHING: `api/src/lib/push.ts`
+   routes `ExponentPushToken[...]` tokens to the Expo push API with no key —
+   the FCM credential is consumed by Expo's push service, not by our API.)
+
+### 6-step on-device walkthrough (owner runs this on a real phone)
+
+Install the preview APK from the EAS build URL, then log in as a **seeded
+PATIENT** (`+919812345601` / `Test@1234` — or any real patient account):
+
+1. **Login → OS permission prompt → Allow.** The app registers the device
+   token on login (best-effort; the Notifications card in Profile shows the
+   permission state).
+2. **Book an appointment, then background the app** → the
+   BOOKING_CONFIRMED push arrives ("Booking confirmed", with the queue
+   number in the body).
+3. **Tap the notification** → the app deep-links to the **Appointments tab**.
+4. On another login (e.g. the doctor on a second device), **call next in
+   queue** → the patient device receives the QUEUE_POSITION push.
+5. **Staff cancels the appointment** → the patient device receives
+   APPOINTMENT_CANCELLED.
+6. **Log out, log in as a different user** → pushes now route to the new
+   account (the device token is upserted to the new user on login).
+
+**Known limitation (verbatim):** logging out does NOT deregister the device
+(no `DELETE /api/devices` — v1.1 backlog), so the device keeps receiving the
+previous user's pushes until the next login upserts the token. Owner: append
+your walkthrough results as a PR comment.
