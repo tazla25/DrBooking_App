@@ -347,6 +347,14 @@ EXPO_TOKEN=<token> npx eas-cli@latest build -p android --profile preview --non-i
 # Accept EAS-managed keystore generation when prompted (first Android build).
 ```
 
+**Dependency pins (SDK-blessed):** `react-native-reanimated@4.5.1`,
+`react-native-worklets@0.10.1` and `expo-font@~57.0.2` are declared in
+package.json via `expo install` — the SDK 57 blessed versions. Without the
+pin, peer resolution pulls reanimated 4.6.x → worklets 0.12.x, which
+`expo-modules-core` cannot compile against on Android
+(`WorkletJSCallInvoker.cpp: no member named 'executeSync'`). If you ever
+upgrade Expo SDK versions, re-run `npx expo install --check`.
+
 **Credentials:** the Android keystore is **EAS-managed**. Run
 `npx eas-cli credentials` to inspect it. Never commit the keystore or any
 service-account JSON — secrets never enter git.
