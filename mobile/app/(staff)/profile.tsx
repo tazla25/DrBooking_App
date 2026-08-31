@@ -128,7 +128,7 @@ export default function StaffProfileScreen() {
           />
         </GlassCard>
 
-        <Text style={styles.version}>Dr Booking · Phase 10</Text>
+        <Text style={styles.version}>ClinIQ · Phase 10</Text>
       </View>
     </GlassScreen>
   );

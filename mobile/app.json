@@ -1,13 +1,13 @@
 {
   "expo": {
-    "name": "Dr Booking",
+    "name": "ClinIQ",
     "slug": "dr-booking-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "drbooking",
     "userInterfaceStyle": "light",
-    "backgroundColor": "#BFD9F2",
+    "backgroundColor": "#AACCFB",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.drbooking.mobile"
@@ -15,7 +15,7 @@
     "android": {
       "package": "com.drbooking.mobile",
       "adaptiveIcon": {
-        "backgroundColor": "#BFD9F2",
+        "backgroundColor": "#AACCFB",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -30,7 +30,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#BFD9F2",
+          "backgroundColor": "#AACCFB",
           "image": "./assets/splash-icon.png",
           "imageWidth": 160
         }

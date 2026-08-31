@@ -96,7 +96,7 @@ export default function AdminProfileScreen() {
         </GlassCard>
 
         <Text style={styles.version}>
-          Dr Booking · Phase 10
+          ClinIQ · Phase 10
           {Constants.expoConfig?.version ? ` · v${Constants.expoConfig.version}` : ''}
         </Text>
       </View>

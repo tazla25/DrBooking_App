@@ -393,6 +393,7 @@ const styles = StyleSheet.create({
   },
   cardWrap: {
     borderRadius: radii.card,
+    overflow: 'hidden', // FIX A: ripple + card content clip to the rounded shape
   },
   card: {},
   cardTop: {

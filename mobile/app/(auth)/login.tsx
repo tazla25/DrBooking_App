@@ -65,7 +65,7 @@ export default function LoginScreen() {
             <View style={styles.logoCircle}>
               <Text style={styles.logoText}>Dr</Text>
             </View>
-            <Text style={styles.title}>Dr Booking</Text>
+            <Text style={styles.title}>ClinIQ</Text>
             <Text style={styles.subtitle}>Book clinic visits without the wait</Text>
           </View>
 

@@ -92,7 +92,7 @@ export default function ProfileScreen() {
           />
         ) : null}
 
-        <Text style={styles.version}>Dr Booking · Phase 10</Text>
+        <Text style={styles.version}>ClinIQ · Phase 10</Text>
       </View>
     </GlassScreen>
   );

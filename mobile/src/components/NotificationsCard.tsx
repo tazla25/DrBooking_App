@@ -78,10 +78,7 @@ export function NotificationsCard() {
       if (next === 'granted') {
         show('Notifications are enabled for this device', 'success');
       } else if (next === 'denied') {
-        show(
-          'Notifications are blocked — enable them for Dr Booking in your device settings',
-          'error',
-        );
+        show('Notifications are blocked — enable them for ClinIQ in your device settings', 'error');
       } else {
         show('Notification permission is still pending for this device', 'info');
       }
@@ -111,7 +108,7 @@ export function NotificationsCard() {
               {permission === null
                 ? 'Checking permission…'
                 : permission === 'denied'
-                  ? 'Blocked — enable Dr Booking notifications in your device settings, then tap here to re-register.'
+                  ? 'Blocked — enable ClinIQ notifications in your device settings, then tap here to re-register.'
                   : 'Booking confirmations, queue updates and cancellations. Tap to re-register this device.'}
             </Text>
           </View>
