@@ -343,7 +343,7 @@ const styles = StyleSheet.create({
   },
   chip: {
     backgroundColor: colors.glass.chip,
-    borderRadius: radii.pill,
+    borderRadius: radii.chip,
     borderWidth: 1,
     borderColor: colors.glass.border,
     paddingHorizontal: spacing.base,
@@ -366,7 +366,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   sortChip: {
-    borderRadius: radii.pill,
+    borderRadius: radii.chip,
     borderWidth: 1,
     borderColor: colors.glass.border,
     backgroundColor: colors.glass.nested,

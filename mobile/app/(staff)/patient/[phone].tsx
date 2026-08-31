@@ -253,7 +253,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.xs,
     backgroundColor: 'rgba(245, 166, 35, 0.18)',
-    borderRadius: radii.pill,
+    borderRadius: radii.chip,
     borderWidth: 1,
     borderColor: 'rgba(245, 166, 35, 0.35)',
     paddingHorizontal: spacing.sm,
@@ -266,7 +266,7 @@ const styles = StyleSheet.create({
   authorName: { ...typography.caption, color: colors.text.secondary, flexShrink: 1 },
   roleChip: {
     backgroundColor: colors.glass.nested,
-    borderRadius: radii.pill,
+    borderRadius: radii.chip,
     borderWidth: 1,
     borderColor: colors.glass.border,
     paddingHorizontal: spacing.sm,

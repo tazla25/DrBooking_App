@@ -91,7 +91,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.88)',
     borderWidth: 1,
     borderColor: colors.glass.border,
-    borderRadius: radii.pill,
+    borderRadius: radii.button, // floating panel — rounded-rect per the Phase 10 radius law
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     ...colors.shadow.card,

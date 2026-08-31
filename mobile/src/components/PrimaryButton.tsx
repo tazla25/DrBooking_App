@@ -23,7 +23,7 @@ interface PrimaryButtonProps {
 }
 
 /**
- * Primary CTA — full-radius pill with the light-blue gradient
+ * Primary CTA — rounded-rect (radius 16) with the light-blue gradient
  * (#6EC1F5 → #4D9FDE), white semibold text and a soft blue glow shadow.
  * `tone="destructive"` swaps to the red gradient for confirmations such as
  * cancelling a booking. Pressed / loading / disabled states included.
@@ -75,11 +75,11 @@ export function PrimaryButton({
 
 const styles = StyleSheet.create({
   wrap: {
-    borderRadius: radii.pill,
+    borderRadius: radii.button,
     ...colors.shadow.ctaGlow,
   },
   disabledWrap: {
-    borderRadius: radii.pill,
+    borderRadius: radii.button,
     opacity: 0.65,
   },
   gradient: {
@@ -88,7 +88,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.sm,
     minHeight: 52,
-    borderRadius: radii.pill,
+    borderRadius: radii.button,
     paddingHorizontal: spacing.xl,
   },
   icon: {},

@@ -41,8 +41,9 @@ interface StatusChipProps {
 }
 
 /**
- * Translucent glass status chip. CONFIRMED green, CALLED blue, COMPLETED
- * gray-green, CANCELLED red, NO_SHOW gray, PENDING orange.
+ * Translucent tinted status chip (radius 12) — CONFIRMED green, CALLED blue,
+ * COMPLETED gray-green, CANCELLED red, NO_SHOW gray, PENDING orange. The tint
+ * stays translucent; label text keeps its high-contrast status color.
  */
 export function StatusChip({ status, large = false }: StatusChipProps) {
   const s = STATUS_STYLES[status] ?? STATUS_STYLES.PENDING;
@@ -57,7 +58,7 @@ export function StatusChip({ status, large = false }: StatusChipProps) {
 
 const styles = StyleSheet.create({
   chip: {
-    borderRadius: radii.pill,
+    borderRadius: radii.chip,
     borderWidth: 1,
     borderColor: colors.glass.border,
     paddingHorizontal: spacing.md,

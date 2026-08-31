@@ -1,10 +1,13 @@
 /**
  * Design tokens — "glassmorphism pastel blue-purple" (mandatory system from Phase 5 on).
  *
- * LAW: screens render a soft pastel diagonal gradient (sky-blue #BFD9F2 → mint
- * #C7E3EC → lavender #CBC6E8); content sits on translucent white glass cards
- * (white 35–55% alpha, radius 24, 1px rgba(255,255,255,0.6) border, soft navy
- * shadow); primary CTA is a full-radius pill with the light-blue gradient.
+ * LAW (Phase 10 revision — real glass): the screen shows the aurora wallpaper
+ * (assets/aurora-bg.png) under a low-opacity pastel gradient; content sits on
+ * genuinely TRANSLUCENT white glass (nested panels stack, so per-layer alphas
+ * are LOW — card 34%, nested 18%; the compound stays glassy, never milky).
+ * Radii are LAW: card 22, inner 16, field 14, chip 12, button 16; a full pill
+ * (999) is reserved for TRUE CIRCLES only (avatars, round icon buttons, the
+ * availability toggle). Primary CTA is the light-blue gradient rounded-rect.
  * All UI text is ENGLISH.
  */
 
@@ -15,6 +18,13 @@ export const colors = {
     mid: '#C7E3EC',
     bottom: '#CBC6E8',
   },
+
+  /**
+   * 5-stop saturated fallback for the aurora wallpaper (used when the
+   * assets/aurora-bg.png ImageBackground fails to load): #A9CCF0 → #B7DCE9 →
+   * #C3D9EA → #C6C1E6 → #BFB9E4.
+   */
+  auroraFallback: ['#A9CCF0', '#B7DCE9', '#C3D9EA', '#C6C1E6', '#BFB9E4'] as const,
 
   /** Light-blue gradient for primary CTAs. */
   ctaGradient: {
@@ -30,18 +40,29 @@ export const colors = {
     inverted: '#FFFFFF', // text over navy pill / blue gradient
   },
 
-  /** Translucent glass surfaces (white alpha per the spec's 35–55% band). */
+  /**
+   * Translucent glass surfaces (white alpha). LOW per-layer band on purpose:
+   * nested panels stack on cards and fields sit on cards — the compound alpha
+   * stays translucent. (Phase 10: card .34 / cardSoft .26 / nested .18 /
+   * field .42 / chip .30 — previously .50/.38/.32/.55/.45, which read milky.)
+   */
   glass: {
-    card: 'rgba(255, 255, 255, 0.50)',
-    cardSoft: 'rgba(255, 255, 255, 0.38)',
-    nested: 'rgba(255, 255, 255, 0.32)',
-    field: 'rgba(255, 255, 255, 0.55)',
-    chip: 'rgba(255, 255, 255, 0.45)',
-    border: 'rgba(255, 255, 255, 0.60)',
-    fieldBorder: 'rgba(255, 255, 255, 0.65)',
-    tabBar: 'rgba(255, 255, 255, 0.62)',
-    header: 'rgba(255, 255, 255, 0.45)',
+    card: 'rgba(255, 255, 255, 0.34)',
+    cardSoft: 'rgba(255, 255, 255, 0.26)',
+    nested: 'rgba(255, 255, 255, 0.18)',
+    field: 'rgba(255, 255, 255, 0.42)',
+    chip: 'rgba(255, 255, 255, 0.30)',
+    border: 'rgba(255, 255, 255, 0.55)',
+    fieldBorder: 'rgba(255, 255, 255, 0.60)',
+    tabBar: 'rgba(255, 255, 255, 0.55)',
+    header: 'rgba(255, 255, 255, 0.38)',
   },
+
+  /** Opaque near-white modal panel — content must be fully readable. */
+  modalPanel: 'rgba(255, 255, 255, 0.92)',
+
+  /** Modal backdrop dim (paired with the expo-blur BlurView in GlassModal). */
+  modalBackdrop: 'rgba(22, 33, 58, 0.60)',
 
   navy: '#16213A', // dark pill secondary button
   destructive: '#E25555',
@@ -97,12 +118,18 @@ export const spacing = {
   huge: 48,
 } as const;
 
-/** Corner radii. */
+/**
+ * Corner radii — LAW (Phase 10 unification). Buttons are rounded-rects (16),
+ * NOT capsules; `pill`/`round` are for true circles only (avatar, round icon
+ * buttons, the availability toggle).
+ */
 export const radii = {
   pill: 999,
-  card: 24,
+  card: 22,
   inner: 16,
-  field: 15,
+  field: 14,
+  chip: 12,
+  button: 16,
   round: 999,
 } as const;
 

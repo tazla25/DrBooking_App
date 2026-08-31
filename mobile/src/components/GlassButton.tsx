@@ -31,7 +31,7 @@ const TONE_BORDER: Record<Tone, string> = {
   accent: 'rgba(245, 166, 35, 0.35)',
 };
 
-/** Translucent glass pill — secondary actions (logout, links, dev tools). */
+/** Translucent glass rounded-rect (radius 16) — secondary actions (logout, links, dev tools). */
 export function GlassButton({
   label,
   onPress,
@@ -67,7 +67,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.sm,
     minHeight: 46,
-    borderRadius: radii.pill,
+    borderRadius: radii.button,
     borderWidth: 1,
     paddingHorizontal: spacing.xl,
   },

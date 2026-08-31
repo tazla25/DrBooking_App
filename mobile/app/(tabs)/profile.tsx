@@ -92,7 +92,7 @@ export default function ProfileScreen() {
           />
         ) : null}
 
-        <Text style={styles.version}>Dr Booking · Phase 8</Text>
+        <Text style={styles.version}>Dr Booking · Phase 10</Text>
       </View>
     </GlassScreen>
   );
@@ -153,7 +153,7 @@ const styles = StyleSheet.create({
   },
   roleChip: {
     backgroundColor: colors.glass.nested,
-    borderRadius: radii.pill,
+    borderRadius: radii.chip,
     borderWidth: 1,
     borderColor: colors.glass.border,
     paddingHorizontal: spacing.md,

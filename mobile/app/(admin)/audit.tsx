@@ -277,7 +277,7 @@ const styles = StyleSheet.create({
   filterChip: {
     paddingHorizontal: spacing.md,
     paddingVertical: 6,
-    borderRadius: radii.pill,
+    borderRadius: radii.chip,
     backgroundColor: colors.glass.chip,
     borderWidth: 1,
     borderColor: colors.glass.border,
@@ -310,7 +310,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
-    borderRadius: radii.pill,
+    borderRadius: radii.chip,
     paddingHorizontal: spacing.md,
     paddingVertical: 4,
   },

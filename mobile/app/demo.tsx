@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router';
+import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   Avatar,
@@ -7,6 +8,7 @@ import {
   GlassCard,
   GlassCircleButton,
   GlassHeader,
+  GlassModal,
   GlassScreen,
   GlassText,
   GlassTextField,
@@ -22,6 +24,7 @@ import { colors, radii, spacing, typography } from '@/theme';
  */
 export default function DemoScreen() {
   const router = useRouter();
+  const [modalVisible, setModalVisible] = useState(false);
 
   if (!__DEV__) {
     // Production safety net: bounce out if this route is somehow hit.
@@ -55,10 +58,10 @@ export default function DemoScreen() {
 
         <DemoSection title="Glass cards">
           <GlassCard padded>
-            <GlassText variant="captionSemi">CARD · radius 24 · white 50%</GlassText>
+            <GlassText variant="captionSemi">CARD · radius 22 · white 34%</GlassText>
             <GlassCard nested style={styles.innerPanel}>
               <GlassText variant="caption" color={colors.text.secondary}>
-                Nested panel · radius 16 · white 32%
+                Nested panel · radius 16 · white 18% — stacks translucent, never milky
               </GlassText>
             </GlassCard>
           </GlassCard>
@@ -137,11 +140,26 @@ export default function DemoScreen() {
           <ErrorBanner message={null} />
         </DemoSection>
 
-        <DemoSection title="Screen gradient">
+        <DemoSection title="Modal (blurred backdrop)">
           <GlassCard padded>
             <GlassText variant="caption" color={colors.text.secondary}>
-              This screen shows the full pastel diagonal gradient: #BFD9F2 → #C7E3EC → #CBC6E8.
-              Cards, fields and chips are translucent white glass over it.
+              GlassModal blurs + dims whatever sits behind it (Android dimezisBlurView, iOS native
+              blur) so background text is never readable through a sheet.
+            </GlassText>
+            <GlassButton
+              label="Open sample modal"
+              icon="alert-circle-outline"
+              onPress={() => setModalVisible(true)}
+            />
+          </GlassCard>
+        </DemoSection>
+
+        <DemoSection title="Screen background">
+          <GlassCard padded>
+            <GlassText variant="caption" color={colors.text.secondary}>
+              This screen shows the pastel aurora wallpaper (assets/aurora-bg.png) under a
+              low-opacity #BFD9F2 → #C7E3EC → #CBC6E8 veil. Cards, fields and chips are translucent
+              white glass over it.
             </GlassText>
             <View style={[styles.swatchRow]}>
               {[
@@ -163,6 +181,18 @@ export default function DemoScreen() {
           </GlassCard>
         </DemoSection>
       </ScrollView>
+
+      <GlassModal
+        visible={modalVisible}
+        title="Sample glass modal"
+        onClose={() => setModalVisible(false)}
+      >
+        <Text style={styles.modalBody}>
+          The queue text behind this sheet is blurred and dimmed — this is the exact treatment the
+          Add-walk-in sheet uses over the staff Today screen.
+        </Text>
+        <PrimaryButton label="Close" onPress={() => setModalVisible(false)} />
+      </GlassModal>
     </GlassScreen>
   );
 }
@@ -204,4 +234,5 @@ const styles = StyleSheet.create({
     borderColor: colors.glass.border,
   },
   swatchLabel: { ...typography.micro, color: colors.text.secondary },
+  modalBody: { ...typography.body, color: colors.text.secondary, textAlign: 'center' },
 });

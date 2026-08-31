@@ -444,7 +444,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    borderRadius: radii.pill,
+    borderRadius: radii.chip,
     backgroundColor: colors.glass.chip,
     borderWidth: 1,
     borderColor: colors.glass.border,
@@ -464,7 +464,7 @@ const styles = StyleSheet.create({
   windowChip: {
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.xs,
-    borderRadius: radii.pill,
+    borderRadius: radii.chip,
     backgroundColor: colors.glass.chip,
     borderWidth: 1,
     borderColor: colors.glass.border,
@@ -511,7 +511,7 @@ const styles = StyleSheet.create({
   daysChip: {
     paddingHorizontal: spacing.md,
     paddingVertical: 2,
-    borderRadius: radii.pill,
+    borderRadius: radii.chip,
     backgroundColor: colors.glass.chip,
     borderWidth: 1,
     borderColor: colors.glass.border,

@@ -235,7 +235,7 @@ const styles = StyleSheet.create({
   myHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   youBadge: {
     backgroundColor: colors.accent,
-    borderRadius: radii.pill,
+    borderRadius: radii.chip,
     paddingHorizontal: spacing.md,
     paddingVertical: 2,
   },

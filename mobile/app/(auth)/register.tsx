@@ -272,7 +272,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
     backgroundColor: colors.glass.nested,
-    borderRadius: radii.pill,
+    borderRadius: radii.inner, // segmented-control container = inner panel (16)
     padding: spacing.xs,
   },
   rolePill: {
@@ -282,7 +282,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.sm,
     minHeight: 42,
-    borderRadius: radii.pill,
+    borderRadius: radii.button, // option buttons (16) inside the inner panel
   },
   rolePillActive: {
     backgroundColor: colors.ctaGradient.end,

@@ -11,7 +11,7 @@ interface NavyButtonProps {
   style?: ViewStyle;
 }
 
-/** Dark navy pill (#16213A) with white text — compact secondary action. */
+/** Dark navy rounded-rect (#16213A, radius 16) with white text — compact secondary action. */
 export function NavyButton({ label, onPress, icon, disabled = false, style }: NavyButtonProps) {
   return (
     <TouchableOpacity
@@ -35,7 +35,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.sm,
     minHeight: 44,
-    borderRadius: radii.pill,
+    borderRadius: radii.button,
     backgroundColor: colors.navy,
     paddingHorizontal: spacing.xl,
   },

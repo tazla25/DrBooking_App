@@ -128,7 +128,7 @@ export default function StaffProfileScreen() {
           />
         </GlassCard>
 
-        <Text style={styles.version}>Dr Booking · Phase 8</Text>
+        <Text style={styles.version}>Dr Booking · Phase 10</Text>
       </View>
     </GlassScreen>
   );
@@ -143,7 +143,7 @@ const styles = StyleSheet.create({
   chipRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   roleChip: {
     backgroundColor: 'rgba(77, 159, 222, 0.20)',
-    borderRadius: radii.pill,
+    borderRadius: radii.chip,
     borderWidth: 1,
     borderColor: 'rgba(77, 159, 222, 0.35)',
     paddingHorizontal: spacing.md,

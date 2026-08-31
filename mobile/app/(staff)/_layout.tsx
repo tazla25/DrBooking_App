@@ -38,7 +38,7 @@ export default function StaffLayout() {
         tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
         tabBarStyle: {
           position: 'absolute',
-          backgroundColor: 'rgba(255, 255, 255, 0.38)',
+          backgroundColor: colors.glass.tabBar, // Phase 10 token (0.55)
           borderTopColor: colors.glass.border,
           borderTopWidth: 1,
         },

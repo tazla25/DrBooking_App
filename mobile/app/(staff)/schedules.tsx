@@ -856,7 +856,7 @@ const styles = StyleSheet.create({
 
   inactiveChip: {
     backgroundColor: 'rgba(138, 147, 166, 0.20)',
-    borderRadius: radii.pill,
+    borderRadius: radii.chip,
     borderWidth: 1,
     borderColor: colors.glass.border,
     paddingHorizontal: spacing.sm,
@@ -866,7 +866,7 @@ const styles = StyleSheet.create({
 
   queueChip: {
     backgroundColor: 'rgba(61, 178, 115, 0.18)',
-    borderRadius: radii.pill,
+    borderRadius: radii.chip,
     borderWidth: 1,
     borderColor: 'rgba(61, 178, 115, 0.35)',
     paddingHorizontal: spacing.sm,
@@ -875,7 +875,7 @@ const styles = StyleSheet.create({
   queueChipText: { ...typography.micro, color: '#2E7D5B', letterSpacing: 0.4 },
 
   overrideChip: {
-    borderRadius: radii.pill,
+    borderRadius: radii.chip,
     borderWidth: 1,
     borderColor: colors.glass.border,
     paddingHorizontal: spacing.sm,

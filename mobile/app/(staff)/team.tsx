@@ -392,7 +392,7 @@ const styles = StyleSheet.create({
   joined: { ...typography.micro, color: colors.text.secondary },
 
   statusChip: {
-    borderRadius: radii.pill,
+    borderRadius: radii.chip,
     borderWidth: 1,
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
@@ -410,7 +410,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.xs,
     backgroundColor: 'rgba(245, 166, 35, 0.18)',
-    borderRadius: radii.pill,
+    borderRadius: radii.chip,
     borderWidth: 1,
     borderColor: 'rgba(245, 166, 35, 0.35)',
     paddingHorizontal: spacing.sm,

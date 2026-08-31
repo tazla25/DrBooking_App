@@ -95,40 +95,42 @@ export function NotificationsCard() {
   return (
     <GlassCard padded style={styles.card}>
       <Text style={styles.sectionTitle}>Notifications</Text>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Notification settings"
-        accessibilityHint="Re-checks permission and re-registers this device for push notifications"
-        disabled={checking}
-        onPress={() => void onPress()}
-        style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-      >
-        <Ionicons name="notifications-outline" size={22} color={colors.ctaGradient.end} />
-        <View style={styles.rowBody}>
-          <Text style={styles.rowTitle}>Push notifications</Text>
-          <Text style={styles.rowCaption}>
-            {permission === null
-              ? 'Checking permission…'
-              : permission === 'denied'
-                ? 'Blocked — enable Dr Booking notifications in your device settings, then tap here to re-register.'
-                : 'Booking confirmations, queue updates and cancellations. Tap to re-register this device.'}
-          </Text>
-        </View>
-        {checking ? (
-          <ActivityIndicator size="small" color={colors.ctaGradient.end} />
-        ) : (
-          <View
-            style={[
-              styles.statusPill,
-              { borderColor: `${meta?.color ?? colors.text.secondary}55` },
-            ]}
-          >
-            <Text style={[styles.statusText, { color: meta?.color ?? colors.text.secondary }]}>
-              {meta?.label ?? '…'}
+      <View style={styles.rowBox}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Notification settings"
+          accessibilityHint="Re-checks permission and re-registers this device for push notifications"
+          disabled={checking}
+          onPress={() => void onPress()}
+          style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+        >
+          <Ionicons name="notifications-outline" size={22} color={colors.ctaGradient.end} />
+          <View style={styles.rowBody}>
+            <Text style={styles.rowTitle}>Push notifications</Text>
+            <Text style={styles.rowCaption}>
+              {permission === null
+                ? 'Checking permission…'
+                : permission === 'denied'
+                  ? 'Blocked — enable Dr Booking notifications in your device settings, then tap here to re-register.'
+                  : 'Booking confirmations, queue updates and cancellations. Tap to re-register this device.'}
             </Text>
           </View>
-        )}
-      </Pressable>
+          {checking ? (
+            <ActivityIndicator size="small" color={colors.ctaGradient.end} />
+          ) : (
+            <View
+              style={[
+                styles.statusPill,
+                { borderColor: `${meta?.color ?? colors.text.secondary}55` },
+              ]}
+            >
+              <Text style={[styles.statusText, { color: meta?.color ?? colors.text.secondary }]}>
+                {meta?.label ?? '…'}
+              </Text>
+            </View>
+          )}
+        </Pressable>
+      </View>
       <GlassToast toast={toast} />
     </GlassCard>
   );
@@ -137,18 +139,27 @@ export function NotificationsCard() {
 const styles = StyleSheet.create({
   card: { gap: spacing.md },
   sectionTitle: { ...typography.h3, color: colors.text.primary },
+  // C3 offender fix: the notification row now sits on a proper nested inner
+  // panel (radius 16, nested alpha, hairline border) instead of floating loose.
+  rowBox: {
+    backgroundColor: colors.glass.nested,
+    borderRadius: radii.inner,
+    borderWidth: 1,
+    borderColor: colors.glass.border,
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    paddingVertical: spacing.xs,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
   },
   rowPressed: { opacity: 0.7 },
   rowBody: { flex: 1, gap: 2 },
   rowTitle: { ...typography.bodySemi, color: colors.text.primary },
   rowCaption: { ...typography.caption, color: colors.text.secondary },
   statusPill: {
-    borderRadius: radii.pill,
+    borderRadius: radii.chip,
     borderWidth: 1,
     paddingHorizontal: spacing.md,
     paddingVertical: 4,

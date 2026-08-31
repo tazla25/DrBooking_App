@@ -739,8 +739,8 @@ const styles = StyleSheet.create({
   dateChip: {
     alignItems: 'center',
     gap: spacing.xs,
-    backgroundColor: colors.glass.nested,
-    borderRadius: radii.inner,
+    backgroundColor: colors.glass.chip, // C3: date chips follow the chip law (12)
+    borderRadius: radii.chip,
     borderWidth: 1,
     borderColor: colors.glass.border,
     paddingHorizontal: spacing.md,
@@ -802,7 +802,7 @@ const styles = StyleSheet.create({
 
   sourceChip: {
     backgroundColor: 'rgba(245, 166, 35, 0.18)',
-    borderRadius: radii.pill,
+    borderRadius: radii.chip,
     borderWidth: 1,
     borderColor: 'rgba(245, 166, 35, 0.35)',
     paddingHorizontal: spacing.sm,
@@ -823,8 +823,8 @@ const styles = StyleSheet.create({
   walkInNone: { ...typography.body, color: colors.text.secondary, textAlign: 'center' },
   scheduleChips: { gap: spacing.sm },
   scheduleChip: {
-    backgroundColor: colors.glass.nested,
-    borderRadius: radii.field,
+    backgroundColor: colors.glass.chip, // C3: schedule chips follow the chip law (12)
+    borderRadius: radii.chip,
     borderWidth: 1,
     borderColor: colors.glass.border,
     paddingHorizontal: spacing.md,
