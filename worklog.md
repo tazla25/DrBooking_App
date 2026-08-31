@@ -325,3 +325,22 @@ Work Log:
 Stage Summary:
 - PR #10 open for owner review: mobile-only UI polish, 265/265 tests unchanged, zero test edits, zero new deps, api/ frozen.
 - Owner action to finish E2: re-supply the Expo token (build is run + URL pasted into the PR) or run `EXPO_TOKEN=<token> npx eas-cli build -p android --profile preview --non-interactive` from v2/ui-polish head and comment the APK URL.
+
+---
+Task ID: 10-c
+Agent: Super Z (main agent)
+Task: Phase 10 E2 completion — EAS preview rebuild with the owner-re-supplied Expo token; PR #10 evidence update. PR NOT self-merged.
+
+Work Log:
+- Owner re-supplied the Expo token in chat; consumed via persistent-shell export + shell env ONLY (never written to any file, commit, worklog, or PR text — placeholders above/below are masked).
+- Repo hygiene first: fetched origin — PR #9 merged by owner at 64d0c1c (origin/main); PR #10 still open at head 3980e81 == local == origin. Dissolved the NEW stray sandbox UUID commit b4749d2 on local main (branch -f main origin/main; its tracked sandbox artifacts scripts/ + tool-results/ + api/.vercel/ were backed up under the untracked .sandbox-artifacts/ before checkout). Checked out v2/ui-polish clean; api/ 0-diff vs origin/main re-verified post-checkout.
+- Gates re-run at 3980e81 immediately before the build: mobile tsc --noEmit CLEAN; jest 21 suites / 265 tests GREEN (3.2 s) — the exact tree EAS built.
+- `eas whoami` → tazla25s-team (Developer role). Started `npx eas-cli build -p android --profile preview --non-interactive --no-wait` from mobile/ → build e901da93-ff55-4978-aba8-8f8082a415a1 (gitCommitHash 3980e81 ✓, com.drbooking.mobile, SDK 57, distribution INTERNAL, preview profile with the production API URL pinned).
+- Polled to FINISHED: created 05:12:04Z, finished by the 05:25 poll (~13 min). Artifact URL captured from `eas build:view --json` (artifacts.buildUrl).
+- Verification: APK downloaded (103,152,571 bytes; `file` → "Android package (APK), with gradle app-metadata.properties"); `rg -a` finds dr-booking-api.vercel.app EMBEDDED in the APK binary (eas.json preview pin flowed into the bundle); local copy deleted afterwards — the EAS URL is the deliverable. Build-log file download came back in a non-plain binary transport (not gzip) — skipped; build:view FINISHED + the APK itself are the authoritative evidence.
+- PR #10: body E2 section rewritten from "honest: not run" to DONE with live URLs + verification; timeline comment posted (build + APK links, 14-day internal-build expiry note 2026-09-14, 5-point owner checklist pointer). NO self-merge.
+
+Stage Summary:
+- E2 CLOSED: preview APK with the Phase-10 UI (brand assets, low-alpha glass, radius law, blurred modals) built from v2/ui-polish head — APK https://expo.dev/artifacts/eas/VjYS6_gJ9ysMhAvQsd8_HxFGXQxFQo1Sz_x7ulHU2to.apk · build page https://expo.dev/accounts/tazla25s-team/projects/dr-booking-mobile/builds/e901da93-ff55-4978-aba8-8f8082a415a1
+- PR #10 remains open for owner review + on-device walkthrough (5-point checklist in the PR body); artifact expiry 2026-09-14, rebuild one-liner documented in the PR.
+- Zero test edits, zero new deps, api/ 0-diff at 3980e81 (re-verified vs origin/main).
