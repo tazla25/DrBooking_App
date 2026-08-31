@@ -13,6 +13,13 @@
  * Every account uses password: Test@1234
  *
  * Run: bun run db:seed   (or `bun prisma/seed.ts` from api/)
+ *
+ * PRODUCTION (Supabase Postgres): SEED_PROFILE=production bun prisma/seed.ts
+ *   → seeds ONLY the SUPER_ADMIN bootstrap account (+91 99990 00001),
+ *     upserted idempotently (never wipes, never overwrites an already-rotated
+ *     password). NO fixtures: fake patients/appointments in a real clinic
+ *     queue are unacceptable. Guard + branch are exported for tests
+ *     (tests/schema-sync.test.ts).
  */
 
 import { PrismaClient } from '@prisma/client';
@@ -23,7 +30,38 @@ const db = new PrismaClient();
 
 const PASSWORD = 'Test@1234';
 
+/** Production seed profile guard — SEED_PROFILE=production. Exported for tests. */
+export function isProductionSeed(env: Record<string, string | undefined> = process.env): boolean {
+  return env.SEED_PROFILE === 'production';
+}
+
+/**
+ * Production branch: ONLY the SUPER_ADMIN bootstrap account. Exported for
+ * tests. Upsert (no wipe): a re-run finds the row and leaves it untouched,
+ * so an already-rotated production password is never reset to the default.
+ */
+export async function seedProductionAdmin(database: PrismaClient): Promise<void> {
+  const passwordHash = await hash(PASSWORD, 10);
+  const admin = await database.user.upsert({
+    where: { phone: '+919999000001' },
+    update: {},
+    create: {
+      phone: '+919999000001',
+      passwordHash,
+      name: 'Platform Admin',
+      role: 'SUPER_ADMIN',
+      verificationStatus: 'VERIFIED',
+    },
+  });
+  console.log(`PRODUCTION profile: SUPER_ADMIN ${admin.phone} ensured — no fixtures seeded`);
+}
+
 async function main(): Promise<void> {
+  if (isProductionSeed()) {
+    await seedProductionAdmin(db);
+    return;
+  }
+
   const today = istTodayISO(); // IST business date — never toISOString()
   const todayDow = dayOfWeekIST(today);
   console.log(`Seeding with IST today = ${today} (dayOfWeek ${todayDow})`);
@@ -363,9 +401,14 @@ async function main(): Promise<void> {
   console.log(`DONE. Login with any seeded phone + password "${PASSWORD}"`);
 }
 
-main()
-  .catch((err) => {
-    console.error('Seed failed:', err);
-    process.exitCode = 1;
-  })
-  .finally(() => db.$disconnect());
+// Direct-run guard: seed.ts stays the runnable entry (`bun prisma/seed.ts`,
+// `prisma db seed`) but must be importable by tests without side effects —
+// importing it in jest must NOT run the dev seed against the test DB.
+if (typeof require !== 'undefined' && require.main === module) {
+  main()
+    .catch((err) => {
+      console.error('Seed failed:', err);
+      process.exitCode = 1;
+    })
+    .finally(() => db.$disconnect());
+}

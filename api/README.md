@@ -254,3 +254,75 @@ SMOKE_BASE_URL=http://localhost:3000 bash tests/smoke.sh   # custom base URL
 The script registers timestamp-unique accounts against a fresh schedule every
 run (and presents a unique client IP to the per-IP limiter), so it is safely
 re-runnable; it exits non-zero on the first failure.
+
+## Production: Supabase Postgres migration (Phase 9)
+
+Local dev and tests stay on **SQLite** (`prisma/schema.prisma` — jest's
+global-setup recreates `db/test.db` every run). Production runs **Supabase
+Postgres** via `prisma/schema.postgres.prisma`, which is **GENERATED** — never
+hand-edit it:
+
+```bash
+node scripts/sync-postgres-schema.mjs   # or: bun scripts/sync-postgres-schema.mjs
+```
+
+The script copies `schema.prisma` verbatim and swaps only the datasource block
+(`provider = "postgresql"` + `directUrl = env("DIRECT_URL")`).
+`tests/schema-sync.test.ts` is the drift alarm: it re-applies the transform
+in memory and asserts the committed copy matches **byte for byte** — so any
+schema.prisma change MUST be committed together with the regenerated output
+(both files in one commit, or CI fails).
+
+Which Supabase URL goes where (from Supabase → Connect):
+
+| Variable | Pooler | Port | Used by |
+|---|---|---|---|
+| `DATABASE_URL` | **Transaction** pooler | 6543 | app runtime (Vercel) + `prisma db seed` |
+| `DIRECT_URL` | **Session** pooler | 5432 | `prisma db push` (DDL needs a direct session) |
+
+Runtime runs through the transaction pooler (pgbouncer) because serverless
+functions open many short-lived connections; DDL/seed through the session
+pooler because pgbouncer's transaction mode cannot run multi-statement DDL.
+
+### One-time migration runbook (exact commands)
+
+```bash
+cd api
+
+# 1. Push the Postgres schema (DDL through the SESSION pooler):
+DATABASE_URL="<TRANSACTION_POOLER_URL>?pgbouncer=true&connection_limit=1" \
+DIRECT_URL="<SESSION_POOLER_URL>" \
+npx prisma db push --schema prisma/schema.postgres.prisma
+
+# 2. Generate the Postgres client for the deploy build (if testing locally):
+npx prisma generate --schema prisma/schema.postgres.prisma
+
+# 3. Seed production — ONLY the SUPER_ADMIN bootstrap account:
+DATABASE_URL="<TRANSACTION_POOLER_URL>?pgbouncer=true&connection_limit=1" \
+SEED_PROFILE=production npx prisma db seed
+
+# 4. MANDATORY: restore the sqlite client so local dev/tests keep working:
+npx prisma generate
+
+# 5. Verify the admin row landed in Supabase (tiny node script):
+DATABASE_URL="<TRANSACTION_POOLER_URL>?pgbouncer=true&connection_limit=1" \
+node -e "const {PrismaClient}=require('@prisma/client');const db=new PrismaClient();
+db.user.findMany().then(u=>{console.log('users:',u.length,u.map(x=>x.role));return db.\$disconnect()})"
+# expect: users: 1 [ 'SUPER_ADMIN' ]
+```
+
+The `DATABASE_URL`/`DIRECT_URL` **env-override pattern** (inline per command)
+is deliberate: nothing production-related ever lands in `api/.env`, so local
+SQLite can never be pointed at Supabase by accident. Real pooler URLs live
+only in `.env` (gitignored) and the Vercel dashboard.
+
+### SEED_PROFILE=production (seed.ts branch)
+
+`SEED_PROFILE=production` makes `prisma/seed.ts` create **only** the
+SUPER_ADMIN account (+91 99990 00001 / Test@1234) and return — upserted
+idempotently, never wiping, never overwriting an already-rotated password.
+No patient/doctor/compounder/appointment fixtures: fake appointments in a
+real clinic queue are unacceptable. The guard (`isProductionSeed`) and the
+branch (`seedProductionAdmin`) are exported and covered by
+`tests/schema-sync.test.ts`. Without the env var the seed behaves exactly as
+before (full dev fixtures, wipes first).
