@@ -309,3 +309,19 @@ Stage Summary:
 - 32 tracked files changed + 3 new asset masters (all mobile/ + worklog.md + README roadmap); api/ 0-diff; 0 new deps; 265/265 tests unchanged.
 - Brand system live: aurora wallpaper screens, low-alpha real glass, unified radius law (22/16/14/12/16, circles only for pill), blurred modal backdrops, launcher icon + Android 12 splash from the owner's calendar-cross master.
 - Owner verification points: splash branded, login glass translucent, no square inner panels, walk-in modal hides background text, icon in launcher.
+
+---
+Task ID: 10-b
+Agent: Super Z (main agent)
+Task: Phase 10 delivery — EAS rebuild status, PR #10 creation. NOT self-merged.
+
+Work Log:
+- E2 rebuild attempted: `eas whoami` -> "Not logged in"; no EXPO_TOKEN exists in this session (Phase 9's owner token was consumed via shell env only and deliberately never persisted — secrets law; ~/.eas has no session either). Cloud build could not be authenticated from here.
+- Risk assessment documented in the PR: LOW — no new native modules (expo-blur already shipped inside the successful Phase 9 build via the blurred tab bars), dependency tree identical to green Phase 9 build #2, expo export proves bundle+assets compile. Only JS + PNG assets changed.
+- PR #10 body (tool-results/pr-body-phase10.md, untracked): gates table, A-D before/after notes, honest E2 section with the exact rebuild command + the live Phase-9 reference APK, and the 5-point owner checklist (splash branded / login glass translucent / no square inner panels / walk-in modal hides background text / icon in launcher + Android 12 splash).
+- Sandbox battle (recurring): HEAD flipped back to local main AFTER the phase-10 commit+push (working tree reset to 64d0c1c, Task-10 worklog entry vanished from disk). Recovery: fetch + branch -f v2/ui-polish origin/v2/ui-polish + checkout — the pushed commit 4187683 was intact (the push had completed), only the local tree needed re-syncing. All delivery steps re-run branch-enforced in ONE call.
+- Delivery: commit 4187683 "feat(phase-10)" pushed to v2/ui-polish (38 files, +314/-148, api/ 0 lines), this docs commit on top, PR #10 opened via the REST API. NO self-merge.
+
+Stage Summary:
+- PR #10 open for owner review: mobile-only UI polish, 265/265 tests unchanged, zero test edits, zero new deps, api/ frozen.
+- Owner action to finish E2: re-supply the Expo token (build is run + URL pasted into the PR) or run `EXPO_TOKEN=<token> npx eas-cli build -p android --profile preview --non-interactive` from v2/ui-polish head and comment the APK URL.
