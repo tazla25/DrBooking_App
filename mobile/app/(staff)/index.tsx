@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -375,41 +376,55 @@ export default function StaffTodayScreen() {
                   <Text style={styles.sectionTitle}>
                     {isToday ? 'Today' : formatDateISO(selectedDate)}
                   </Text>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.dateStrip}
-                  >
-                    {stripDates.map((date) => {
-                      const selected = date === selectedDate;
-                      return (
-                        <AnimatedChip
-                          key={date}
-                          active={selected}
-                          bg={[colors.glass.chip, colors.ctaGradient.end]}
-                          border={[colors.glass.border, colors.ctaGradient.end]}
-                          onPress={() => {
-                            if (date !== selectedDate) hapticSelection();
-                            setSelectedDate(date);
-                          }}
-                          accessibilityLabel={`View ${formatDateISO(date)}`}
-                          accessibilityState={{ selected }}
-                          style={styles.dateChip}
-                        >
-                          <Text
-                            style={[styles.dateChipDay, selected && styles.dateChipTextSelected]}
+                  <View style={styles.dateStripWrap}>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.dateStrip}
+                    >
+                      {stripDates.map((date) => {
+                        const selected = date === selectedDate;
+                        return (
+                          <AnimatedChip
+                            key={date}
+                            active={selected}
+                            bg={[colors.glass.chip, colors.ctaGradient.end]}
+                            border={[colors.glass.border, colors.ctaGradient.end]}
+                            onPress={() => {
+                              if (date !== selectedDate) hapticSelection();
+                              setSelectedDate(date);
+                            }}
+                            accessibilityLabel={`View ${formatDateISO(date)}`}
+                            accessibilityState={{ selected }}
+                            style={styles.dateChip}
                           >
-                            {date === istToday ? 'Today' : formatDateISO(date).slice(0, 6)}
-                          </Text>
-                          <Text
-                            style={[styles.dateChipNum, selected && styles.dateChipTextSelected]}
-                          >
-                            {date.slice(8, 10)}
-                          </Text>
-                        </AnimatedChip>
-                      );
-                    })}
-                  </ScrollView>
+                            <Text
+                              style={[styles.dateChipDay, selected && styles.dateChipTextSelected]}
+                            >
+                              {date === istToday ? 'Today' : formatDateISO(date).slice(0, 6)}
+                            </Text>
+                            <Text
+                              style={[styles.dateChipNum, selected && styles.dateChipTextSelected]}
+                            >
+                              {date.slice(8, 10)}
+                            </Text>
+                          </AnimatedChip>
+                        );
+                      })}
+                      {/* Trailing runway — the strip always overflows by the
+                          spacer width, so the last chip peeks instead of hiding
+                          flush behind the fold. */}
+                      <View style={styles.dateStripTrailing} />
+                    </ScrollView>
+                    {/* Leading-edge fade — chips dissolve into the glass as
+                        they slide under this 24px ramp; taps pass through. */}
+                    <LinearGradient
+                      colors={['rgba(255, 255, 255, 0)', colors.glass.card]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.dateStripFade}
+                    />
+                  </View>
                   {!isToday ? (
                     <Text style={styles.todayHint}>
                       Viewing a different day · queue actions work on today&apos;s queue only
@@ -686,6 +701,10 @@ function QueueRow({
             />
           ))}
         </View>
+      ) : appointment.status === 'COMPLETED' ? (
+        /* Terminal state — no actions to offer; a quiet caption closes the row
+           (the API has no completedAt, so no time is ever shown). */
+        <Text style={styles.completedCaption}>Visit completed</Text>
       ) : null}
     </GlassCard>
   );
@@ -757,12 +776,22 @@ const styles = StyleSheet.create({
   identityText: { flex: 1, gap: spacing.xs },
   doctorName: { ...typography.h2, color: colors.text.primary },
   identityCaption: { ...typography.caption, color: colors.text.secondary },
-  availabilityRow: { alignItems: 'flex-end', gap: spacing.xs },
+  availabilityRow: { alignItems: 'flex-end', gap: spacing.sm },
   availabilityLabel: { ...typography.micro, color: colors.text.secondary },
 
   // date strip
   sectionTitle: { ...typography.h3, color: colors.text.primary },
   dateStrip: { gap: spacing.sm, paddingVertical: spacing.xs },
+  dateStripWrap: { position: 'relative' },
+  dateStripTrailing: { width: spacing.xl },
+  dateStripFade: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    width: spacing.xl,
+    pointerEvents: 'none',
+  },
   dateChip: {
     alignItems: 'center',
     gap: spacing.xs,
@@ -818,6 +847,7 @@ const styles = StyleSheet.create({
   notesCard: { padding: spacing.md },
   notesText: { ...typography.caption, color: colors.text.primary },
   rowActions: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
+  completedCaption: { ...typography.micro, color: colors.text.secondary },
   rowBtn: { minHeight: 44, paddingHorizontal: spacing.lg },
 
   sourceChip: {
