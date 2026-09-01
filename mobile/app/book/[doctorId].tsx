@@ -203,6 +203,7 @@ export default function BookingScreen() {
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
+                style={styles.dateRowScroll}
                 contentContainerStyle={styles.dateRow}
               >
                 {dates.map((d) => {
@@ -238,6 +239,8 @@ export default function BookingScreen() {
                     </AnimatedChip>
                   );
                 })}
+                {/* B1 trailing runway — width = the parent scroll padding. */}
+                <View style={styles.dateTrailing} />
               </ScrollView>
 
               {/* -- availability -------------------------------------------------- */}
@@ -475,7 +478,10 @@ const styles = StyleSheet.create({
   },
   clinic: { ...typography.bodySemi, color: colors.text.primary, marginTop: 2 },
   address: { ...typography.caption, color: colors.text.secondary },
-  dateRow: { gap: spacing.sm, paddingRight: spacing.base },
+  dateRow: { gap: spacing.sm, paddingHorizontal: spacing.base },
+  // B1 full-bleed: negative margin = the vertical scroll's padding.
+  dateRowScroll: { marginHorizontal: -spacing.base },
+  dateTrailing: { width: spacing.base },
   // dateChip keeps structure only — bg/border crossfade in AnimatedChip.
   dateChip: {
     alignItems: 'center',

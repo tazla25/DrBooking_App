@@ -392,7 +392,14 @@ function CompounderRow({
 const styles = StyleSheet.create({
   body: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  listContent: { padding: spacing.base, paddingBottom: spacing.xxxl, gap: spacing.base },
+  listContent: {
+    padding: spacing.base,
+    // B4: floating glass tab bar (~48px + safe inset) + breathing room. 96 is
+    // the ONE documented literal (worklog 10-g) — the largest spacing token
+    // (48) does not reach it.
+    paddingBottom: 96,
+    gap: spacing.base,
+  },
   card: { gap: spacing.sm },
 
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },

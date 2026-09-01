@@ -160,7 +160,13 @@ const styles = StyleSheet.create({
   rowWrapPressed: {
     opacity: 0.9,
   },
-  listContent: { paddingBottom: spacing.xxxl, gap: spacing.base },
+  listContent: {
+    // B4: floating glass tab bar (~48px + safe inset) + breathing room. 96 is
+    // the ONE documented literal (worklog 10-g) — the largest spacing token
+    // (48) does not reach it.
+    paddingBottom: 96,
+    gap: spacing.base,
+  },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   identity: { flex: 1, gap: spacing.xs },
   name: { ...typography.bodySemi, color: colors.text.primary, flexShrink: 1 },

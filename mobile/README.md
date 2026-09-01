@@ -112,13 +112,15 @@ mobile/
 
 ## Design system — "glassmorphism pastel blue-purple" (Phase 10 revision)
 
-- Full-screen **aurora wallpaper** (`assets/aurora-bg.png`, owner-supplied,
-  `resizeMode cover`) under a low-opacity pastel veil
-  `#BFD9F2 → #C7E3EC → #CBC6E8` (`GlassScreen`); a 5-stop saturated gradient
-  is the runtime fallback if the wallpaper fails to load
-- **Real glass** — low per-layer alphas so stacking stays translucent:
-  card 34% · cardSoft 26% · nested 18% · field 42% · chip 30%
-  (borders 55–60%, tab bar 55%, header 38%) — `src/theme/tokens.ts`
+- Full-screen **vivid diagonal canvas** `#4A9FE8 → #5E7BE0 → #7C63D8`
+  (start/end diagonally opposite) plus two soft white radial glows (top-left,
+  bottom-right) — pure vector, no wallpaper (`GlassScreen`); the old
+  `assets/aurora-bg.png` stays in the repo, unused
+- **Raised glass** — alphas lifted for layer separation against the vivid
+  canvas: card 66% · cardSoft 52% · nested 34% · field 58% · chip 46%
+  (borders 60–65%, tab bar 72%, header 55%), navy shadow alpha .22,
+  elevation 10 — `src/theme/tokens.ts`; text contrast is hard-gated at 4.5:1
+  by `scripts/contrast-check.ts` (report: `docs/contrast-report.md`)
 - **Radius law**: card 22 · inner 16 · field 14 · chip 12 · button 16 ·
   pill 999 (true circles only: avatar, round icon buttons, availability
   toggle). Buttons are rounded-rects, NOT capsules.

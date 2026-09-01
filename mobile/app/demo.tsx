@@ -239,9 +239,9 @@ export default function DemoScreen() {
         <DemoSection title="Screen background">
           <GlassCard padded>
             <GlassText variant="caption" color={colors.text.secondary}>
-              This screen shows the pastel aurora wallpaper (assets/aurora-bg.png) under a
-              low-opacity #BFD9F2 → #C7E3EC → #CBC6E8 veil. Cards, fields and chips are translucent
-              white glass over it.
+              This screen shows the vivid diagonal canvas #4A9FE8 → #5E7BE0 → #7C63D8 with soft
+              white corner glows (pure vector — no wallpaper). Cards, fields and chips are raised
+              translucent white glass over it.
             </GlassText>
             <View style={[styles.swatchRow]}>
               {[

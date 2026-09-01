@@ -3,10 +3,12 @@ import { Platform } from 'react-native';
 /**
  * Design tokens — "glassmorphism pastel blue-purple" (mandatory system from Phase 5 on).
  *
- * LAW (Phase 10 revision — real glass): the screen shows the aurora wallpaper
- * (assets/aurora-bg.png) under a low-opacity pastel gradient; content sits on
- * genuinely TRANSLUCENT white glass (nested panels stack, so per-layer alphas
- * are LOW — card 34%, nested 18%; the compound stays glassy, never milky).
+ * LAW (Phase 10 "Glass Reality" revision): the screen is a vivid diagonal
+ * canvas (#4A9FE8 → #5E7BE0 → #7C63D8 + soft white corner glows); content
+ * sits on RAISED translucent white glass (card 66%, nested 34%) so every
+ * layer separates from the canvas. Text contrast is GATED —
+ * scripts/contrast-check.ts fails if any text/glass pair drops below 4.5:1
+ * (report: docs/contrast-report.md).
  * Radii are LAW: card 22, inner 16, field 14, chip 12, button 16; a full pill
  * (999) is reserved for TRUE CIRCLES only (avatars, round icon buttons, the
  * availability toggle). Primary CTA is the light-blue gradient rounded-rect.
@@ -14,17 +16,17 @@ import { Platform } from 'react-native';
  */
 
 export const colors = {
-  /** Screen gradient stops — top → middle → bottom, drawn diagonally. */
+  /** Canvas stops — top → middle → bottom, drawn diagonally (Glass Reality). */
   gradient: {
-    top: '#BFD9F2',
-    mid: '#C7E3EC',
-    bottom: '#CBC6E8',
+    top: '#4A9FE8',
+    mid: '#5E7BE0',
+    bottom: '#7C63D8',
   },
 
   /**
-   * 5-stop saturated fallback for the aurora wallpaper (used when the
-   * assets/aurora-bg.png ImageBackground fails to load): #A9CCF0 → #B7DCE9 →
-   * #C3D9EA → #C6C1E6 → #BFB9E4.
+   * LEGACY (unused since the Glass Reality pass — the canvas is pure vector
+   * now, there is no wallpaper and no load-failure fallback): the old 5-stop
+   * pastel fallback. #A9CCF0 → #B7DCE9 → #C3D9EA → #C6C1E6 → #BFB9E4.
    */
   auroraFallback: ['#A9CCF0', '#B7DCE9', '#C3D9EA', '#C6C1E6', '#BFB9E4'] as const,
 
@@ -37,27 +39,27 @@ export const colors = {
   /** Text on light glass. */
   text: {
     primary: '#17264A', // dark navy
-    secondary: '#5A6B8C', // gray-blue (also placeholder color)
+    secondary: '#445273', // gray-blue (gate-forced darker than spec's #475679 — the A3 gate needs 4.5:1 at the worst corner)
     onDark: '#FFFFFF',
     inverted: '#FFFFFF', // text over navy pill / blue gradient
   },
 
   /**
-   * Translucent glass surfaces (white alpha). LOW per-layer band on purpose:
-   * nested panels stack on cards and fields sit on cards — the compound alpha
-   * stays translucent. (Phase 10: card .34 / cardSoft .26 / nested .18 /
-   * field .42 / chip .30 — previously .50/.38/.32/.55/.45, which read milky.)
+   * Translucent glass surfaces (white alpha) — GLASS REALITY band, raised so
+   * every layer separates against the vivid canvas: card .66 / cardSoft .52 /
+   * nested .34 / field .58 / chip .46 (borders .60–.65, tab bar .72, header
+   * .55). Still translucent — nested panels stack on cards.
    */
   glass: {
-    card: 'rgba(255, 255, 255, 0.34)',
-    cardSoft: 'rgba(255, 255, 255, 0.26)',
-    nested: 'rgba(255, 255, 255, 0.18)',
-    field: 'rgba(255, 255, 255, 0.42)',
-    chip: 'rgba(255, 255, 255, 0.30)',
-    border: 'rgba(255, 255, 255, 0.55)',
+    card: 'rgba(255, 255, 255, 0.66)',
+    cardSoft: 'rgba(255, 255, 255, 0.52)',
+    nested: 'rgba(255, 255, 255, 0.34)',
+    field: 'rgba(255, 255, 255, 0.58)',
+    chip: 'rgba(255, 255, 255, 0.46)',
+    border: 'rgba(255, 255, 255, 0.65)',
     fieldBorder: 'rgba(255, 255, 255, 0.60)',
-    tabBar: 'rgba(255, 255, 255, 0.55)',
-    header: 'rgba(255, 255, 255, 0.38)',
+    tabBar: 'rgba(255, 255, 255, 0.72)',
+    header: 'rgba(255, 255, 255, 0.55)',
   },
 
   /** Opaque near-white modal panel — content must be fully readable. */
@@ -94,14 +96,14 @@ export const colors = {
     PENDING: { fg: '#B27415', bg: 'rgba(245, 166, 35, 0.20)' },
   } as const,
 
-  /** Soft shadow used by glass panels: rgba(23,38,74,0.12) blur 24. */
+  /** Glass panel shadow — navy alpha .22, elevation 10 (Glass Reality). */
   shadow: {
     card: {
       shadowColor: '#17264A',
-      shadowOpacity: 0.12,
+      shadowOpacity: 0.22,
       shadowRadius: 24,
       shadowOffset: { width: 0, height: 8 },
-      elevation: 5,
+      elevation: 10,
     },
     ctaGlow: {
       shadowColor: '#4D9FDE',

@@ -141,11 +141,13 @@ export default function LiveQueueScreen() {
                     <View style={styles.myRow}>
                       <Text style={styles.myToken}>#{data.my.queueNumber}</Text>
                       <Text style={styles.myWait}>
-                        {data.my.status === 'CALLED'
-                          ? 'It is your turn — go to the desk'
-                          : data.my.estWaitMin > 0
-                            ? `~${data.my.estWaitMin} min to go`
-                            : 'You are next'}
+                        {data.my.status === 'COMPLETED'
+                          ? 'Visit completed'
+                          : data.my.status === 'CALLED'
+                            ? 'It is your turn — go to the desk'
+                            : data.my.estWaitMin > 0
+                              ? `~${data.my.estWaitMin} min to go`
+                              : 'You are next'}
                       </Text>
                     </View>
                   </GlassCard>

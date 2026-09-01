@@ -135,8 +135,10 @@ const styles = StyleSheet.create({
   body: {
     flex: 1,
     padding: spacing.base,
-    // Absolute tab bar clearance (verified — single inset, no double).
-    paddingBottom: spacing.huge,
+    // B4: floating glass tab bar (~48px + safe inset) + breathing room. 96 is
+    // the ONE documented literal (worklog 10-g) — the largest spacing token
+    // (48) does not reach it.
+    paddingBottom: 96,
     gap: spacing.base,
   },
   card: { gap: spacing.base },

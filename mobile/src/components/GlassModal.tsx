@@ -1,5 +1,13 @@
 import { BlurView } from 'expo-blur';
-import { Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
 import type { ReactNode } from 'react';
 import { GlassText } from './GlassText';
 import { colors, radii, spacing } from '@/theme';
@@ -62,14 +70,28 @@ export function GlassModal({
             onPress={() => undefined} // swallow taps so the panel never dismisses
             style={styles.cardWrap}
           >
-            <View style={styles.panel}>
-              {title ? (
-                <GlassText variant="h3" style={styles.title}>
-                  {title}
-                </GlassText>
-              ) : null}
-              {children}
-            </View>
+            {/* B2 port: keyboard-safe + scrollable sheet — the panel is capped
+                at 85% height, its body scrolls, iOS lifts it above the
+                keyboard (Android relies on window resizing). Blur/dim layers
+                are untouched. */}
+            <KeyboardAvoidingView
+              behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+              style={styles.kav}
+            >
+              <View style={styles.panel}>
+                {title ? (
+                  <GlassText variant="h3" style={styles.title}>
+                    {title}
+                  </GlassText>
+                ) : null}
+                <ScrollView
+                  keyboardShouldPersistTaps="handled"
+                  contentContainerStyle={styles.panelBody}
+                >
+                  {children}
+                </ScrollView>
+              </View>
+            </KeyboardAvoidingView>
           </Pressable>
         </Pressable>
       </View>
@@ -93,6 +115,9 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 420,
   },
+  kav: {
+    width: '100%',
+  },
   panel: {
     backgroundColor: colors.modalPanel,
     borderRadius: radii.card,
@@ -100,6 +125,10 @@ const styles = StyleSheet.create({
     borderColor: colors.glass.border,
     ...colors.shadow.card,
     padding: spacing.lg,
+    gap: spacing.base,
+    maxHeight: '85%',
+  },
+  panelBody: {
     gap: spacing.base,
   },
   title: {

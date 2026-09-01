@@ -187,6 +187,7 @@ export default function FindDoctorsScreen() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
+          style={styles.chipRowScroll}
           contentContainerStyle={styles.chipRow}
         >
           <FilterChip
@@ -205,6 +206,8 @@ export default function FindDoctorsScreen() {
               onPress={() => pickSpecialization(spec)}
             />
           ))}
+          {/* B1 trailing runway — width = the parent controls padding. */}
+          <View style={styles.chipTrailing} />
         </ScrollView>
 
         <View style={styles.sortRow}>
@@ -357,8 +360,11 @@ const styles = StyleSheet.create({
   },
   chipRow: {
     gap: spacing.sm,
-    paddingRight: spacing.base,
+    paddingHorizontal: spacing.base,
   },
+  // B1 full-bleed: negative margin = the controls row's padding.
+  chipRowScroll: { marginHorizontal: -spacing.base },
+  chipTrailing: { width: spacing.base },
   // chip keeps structure only — bg/border crossfade in AnimatedChip.
   chip: {
     paddingHorizontal: spacing.base,
@@ -399,9 +405,10 @@ const styles = StyleSheet.create({
   list: {
     paddingHorizontal: spacing.base,
     paddingTop: spacing.sm,
-    // Absolute tab bar (~48px + safe inset): single inset (GlassScreen), this
-    // padding clears the bar — verified, no double inset.
-    paddingBottom: spacing.huge,
+    // B4: floating glass tab bar (~48px + safe inset) + breathing room. 96 is
+    // the ONE documented literal (worklog 10-g) — the largest spacing token
+    // (48) does not reach it.
+    paddingBottom: 96,
     gap: spacing.md,
   },
   cardWrap: {

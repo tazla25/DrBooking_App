@@ -7,7 +7,10 @@
     "icon": "./assets/icon.png",
     "scheme": "drbooking",
     "userInterfaceStyle": "light",
-    "backgroundColor": "#AACCFB",
+    "backgroundColor": "#4A9FE8",
+    "androidNavigationBar": {
+      "backgroundColor": "#4A9FE8"
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.drbooking.mobile"

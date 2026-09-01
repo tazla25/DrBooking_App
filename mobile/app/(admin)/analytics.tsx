@@ -455,7 +455,14 @@ function RevenueChart({ series }: { series: { date: string; count: number; reven
 }
 
 const styles = StyleSheet.create({
-  body: { padding: spacing.base, paddingBottom: spacing.xxxl, gap: spacing.base },
+  body: {
+    padding: spacing.base,
+    // B4: floating glass tab bar (~48px + safe inset) + breathing room. 96 is
+    // the ONE documented literal (worklog 10-g) — the largest spacing token
+    // (48) does not reach it.
+    paddingBottom: 96,
+    gap: spacing.base,
+  },
   card: { gap: spacing.md },
   sectionTitle: { ...typography.h3, color: colors.text.primary },
   pickerRow: { gap: spacing.sm, paddingRight: spacing.sm },
