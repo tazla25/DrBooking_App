@@ -421,116 +421,114 @@ function ScheduleFormModal({
       dismissable={!submitting}
       onClose={onClose}
     >
-      <ScrollView bounces={false} contentContainerStyle={styles.formScroll}>
-        <Text style={styles.fieldsetLabel}>Day of the week</Text>
-        <View style={styles.dayChips}>
-          {DAY_CHIPS.map((day) => {
-            const selected = form.dayOfWeek === day;
-            return (
-              <AnimatedChip
-                key={day}
-                active={selected}
-                bg={[colors.glass.nested, colors.ctaGradient.end]}
-                border={[colors.glass.border, colors.ctaGradient.end]}
-                radius={radii.field}
-                onPress={() => {
-                  if (!selected) hapticSelection();
-                  setForm((f) => ({ ...f, dayOfWeek: day }));
-                }}
-                accessibilityLabel={dayName(day)}
-                accessibilityState={{ selected }}
-                style={styles.dayChip}
-              >
-                <Text style={[styles.dayChipText, selected && styles.dayChipTextSelected]}>
-                  {dayName(day, true)}
-                </Text>
-              </AnimatedChip>
-            );
-          })}
-        </View>
-        {errors.dayOfWeek ? <Text style={styles.fieldError}>{errors.dayOfWeek}</Text> : null}
+      <Text style={styles.fieldsetLabel}>Day of the week</Text>
+      <View style={styles.dayChips}>
+        {DAY_CHIPS.map((day) => {
+          const selected = form.dayOfWeek === day;
+          return (
+            <AnimatedChip
+              key={day}
+              active={selected}
+              bg={[colors.glass.nested, colors.ctaGradient.end]}
+              border={[colors.glass.border, colors.ctaGradient.end]}
+              radius={radii.field}
+              onPress={() => {
+                if (!selected) hapticSelection();
+                setForm((f) => ({ ...f, dayOfWeek: day }));
+              }}
+              accessibilityLabel={dayName(day)}
+              accessibilityState={{ selected }}
+              style={styles.dayChip}
+            >
+              <Text style={[styles.dayChipText, selected && styles.dayChipTextSelected]}>
+                {dayName(day, true)}
+              </Text>
+            </AnimatedChip>
+          );
+        })}
+      </View>
+      {errors.dayOfWeek ? <Text style={styles.fieldError}>{errors.dayOfWeek}</Text> : null}
 
-        <View style={styles.timeRow}>
-          <GlassTextField
-            label="Starts"
-            icon="play-outline"
-            value={form.startTime}
-            onChangeText={(v) => setForm((f) => ({ ...f, startTime: v }))}
-            error={errors.startTime}
-            placeholder="09:00"
-            keyboardType="numbers-and-punctuation"
-            containerStyle={styles.timeField}
-          />
-          <GlassTextField
-            label="Ends"
-            icon="stop-outline"
-            value={form.endTime}
-            onChangeText={(v) => setForm((f) => ({ ...f, endTime: v }))}
-            error={errors.endTime}
-            placeholder="13:00"
-            keyboardType="numbers-and-punctuation"
-            containerStyle={styles.timeField}
-          />
-        </View>
+      <View style={styles.timeRow}>
+        <GlassTextField
+          label="Starts"
+          icon="play-outline"
+          value={form.startTime}
+          onChangeText={(v) => setForm((f) => ({ ...f, startTime: v }))}
+          error={errors.startTime}
+          placeholder="09:00"
+          keyboardType="numbers-and-punctuation"
+          containerStyle={styles.timeField}
+        />
+        <GlassTextField
+          label="Ends"
+          icon="stop-outline"
+          value={form.endTime}
+          onChangeText={(v) => setForm((f) => ({ ...f, endTime: v }))}
+          error={errors.endTime}
+          placeholder="13:00"
+          keyboardType="numbers-and-punctuation"
+          containerStyle={styles.timeField}
+        />
+      </View>
 
+      <GlassTextField
+        label="Clinic name"
+        icon="business-outline"
+        value={form.clinicName}
+        onChangeText={(v) => setForm((f) => ({ ...f, clinicName: v }))}
+        error={errors.clinicName}
+        placeholder="Sunrise Clinic"
+      />
+      <GlassTextField
+        label="Clinic address"
+        icon="location-outline"
+        value={form.clinicAddress}
+        onChangeText={(v) => setForm((f) => ({ ...f, clinicAddress: v }))}
+        error={errors.clinicAddress}
+        placeholder="Street, area, city"
+      />
+      <View style={styles.timeRow}>
         <GlassTextField
-          label="Clinic name"
-          icon="business-outline"
-          value={form.clinicName}
-          onChangeText={(v) => setForm((f) => ({ ...f, clinicName: v }))}
-          error={errors.clinicName}
-          placeholder="Sunrise Clinic"
+          label="PIN code (optional)"
+          icon="mail-outline"
+          value={form.pinCode}
+          onChangeText={(v) => setForm((f) => ({ ...f, pinCode: v }))}
+          error={errors.pinCode}
+          placeholder="560001"
+          keyboardType="number-pad"
+          containerStyle={styles.timeField}
         />
         <GlassTextField
-          label="Clinic address"
-          icon="location-outline"
-          value={form.clinicAddress}
-          onChangeText={(v) => setForm((f) => ({ ...f, clinicAddress: v }))}
-          error={errors.clinicAddress}
-          placeholder="Street, area, city"
+          label="Minutes per patient"
+          icon="speedometer-outline"
+          value={form.avgMinutesPerPatient}
+          onChangeText={(v) => setForm((f) => ({ ...f, avgMinutesPerPatient: v }))}
+          error={errors.avgMinutesPerPatient}
+          placeholder="10"
+          keyboardType="number-pad"
+          containerStyle={styles.timeField}
         />
-        <View style={styles.timeRow}>
-          <GlassTextField
-            label="PIN code (optional)"
-            icon="mail-outline"
-            value={form.pinCode}
-            onChangeText={(v) => setForm((f) => ({ ...f, pinCode: v }))}
-            error={errors.pinCode}
-            placeholder="560001"
-            keyboardType="number-pad"
-            containerStyle={styles.timeField}
-          />
-          <GlassTextField
-            label="Minutes per patient"
-            icon="speedometer-outline"
-            value={form.avgMinutesPerPatient}
-            onChangeText={(v) => setForm((f) => ({ ...f, avgMinutesPerPatient: v }))}
-            error={errors.avgMinutesPerPatient}
-            placeholder="10"
-            keyboardType="number-pad"
-            containerStyle={styles.timeField}
-          />
-        </View>
-        <GlassTextField
-          label="Landmark (optional)"
-          icon="flag-outline"
-          value={form.landmark}
-          onChangeText={(v) => setForm((f) => ({ ...f, landmark: v }))}
-          error={errors.landmark}
-          placeholder="Near the metro station"
-        />
-        <GlassTextField
-          label="Map link (optional)"
-          icon="map-outline"
-          value={form.mapLink}
-          onChangeText={(v) => setForm((f) => ({ ...f, mapLink: v }))}
-          error={errors.mapLink}
-          placeholder="https://maps.example.com/..."
-          autoCapitalize="none"
-        />
+      </View>
+      <GlassTextField
+        label="Landmark (optional)"
+        icon="flag-outline"
+        value={form.landmark}
+        onChangeText={(v) => setForm((f) => ({ ...f, landmark: v }))}
+        error={errors.landmark}
+        placeholder="Near the metro station"
+      />
+      <GlassTextField
+        label="Map link (optional)"
+        icon="map-outline"
+        value={form.mapLink}
+        onChangeText={(v) => setForm((f) => ({ ...f, mapLink: v }))}
+        error={errors.mapLink}
+        placeholder="https://maps.example.com/..."
+        autoCapitalize="none"
+      />
 
-        {apiError ? <ErrorBanner message={apiError} /> : null}
-      </ScrollView>
+      {apiError ? <ErrorBanner message={apiError} /> : null}
       <View style={styles.confirmButtons}>
         <PrimaryButton
           label={isEdit ? 'Save changes' : 'Create schedule'}
@@ -676,7 +674,7 @@ function OverridesModal({
       onClose={onClose}
     >
       {schedule ? (
-        <ScrollView bounces={false} contentContainerStyle={styles.formScroll}>
+        <>
           <Text style={styles.overrideSubtitle} numberOfLines={1}>
             {schedule.clinicName} · {dayName(schedule.dayOfWeek)} {schedule.startTime}–
             {schedule.endTime}
@@ -840,7 +838,7 @@ function OverridesModal({
             disabled={form.type === null || form.date === ''}
             onPress={() => void submit()}
           />
-        </ScrollView>
+        </>
       ) : null}
     </GlassModal>
   );
@@ -933,7 +931,6 @@ const styles = StyleSheet.create({
   // modals
   confirmText: { ...typography.body, color: colors.text.secondary, textAlign: 'center' },
   confirmButtons: { gap: spacing.sm },
-  formScroll: { gap: spacing.md },
   fieldsetLabel: { ...typography.captionSemi, color: colors.text.primary, marginLeft: spacing.md },
   fieldError: {
     ...typography.caption,
