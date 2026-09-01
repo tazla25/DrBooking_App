@@ -22,7 +22,8 @@ interface GlassModalProps {
 }
 
 /**
- * Centered glass sheet (RN Modal) — Phase 10-e bounded-scroll rewrite.
+ * Centered glass sheet (RN Modal) — Phase 10-e bounded-scroll rewrite +
+ * Phase 10-f gesture fix.
  *
  * The backdrop is a REAL blur: expo-blur BlurView (Android uses
  * experimentalBlurMethod="dimezisBlurView"; iOS uses the native blur) under a
@@ -32,15 +33,28 @@ interface GlassModalProps {
  *
  * The 10-e fix (device report: "Add walk-in patient" / "New schedule" /
  * "Add compounder" panels clipped content mid-line, submit CTAs unreachable,
- * no scrolling): the height cap now lives on cardWrap (85% of the flex:1
- * backdrop) and the ScrollView became a BOUNDED flex child — flexGrow 0
- * (never stretch to fill) + flexShrink 1 (yield to the capped parent) — so it
+ * no scrolling): the height cap lives on cardWrap (85% of the flex:1
+ * backdrop) and the ScrollView is a BOUNDED flex child — flexGrow 0 (never
+ * stretch to fill) + flexShrink 1 (yield to the capped parent) — so it
  * always lays out against a definite content height and actually scrolls. The
  * panel carries flexShrink 1 so the cardWrap cap propagates into the panel
- * box (without it the panel overflows the capped wrapper and the ScrollView
- * stays unbounded — the old bug). The title stays pinned above the scroll;
- * children live inside the ScrollView with a base gap, so any amount of
- * content scrolls and every child (error banners, CTAs) stays reachable.
+ * box; the title stays pinned above the scroll; children live inside the
+ * ScrollView with a base gap, so any amount of content scrolls and every
+ * child (error banners, CTAs) stays reachable.
+ *
+ * The 10-f fix (follow-up device report: the scroll gesture is sticky — it
+ * only starts from some spots): the dim+dismiss surface is a SIBLING BELOW
+ * the panel, and NOTHING Pressable sits above the ScrollView. The old tree
+ * had TWO nested Pressables above the panel (the backdrop wrapper itself +
+ * a noop "swallow" wrapper around the card); on Android's new architecture a
+ * drag starting inside those JS Pressables must win a responder negotiation
+ * on move — with that nesting the handoff to the native ScrollView was
+ * unreliable, so the owner had to tap around to find a draggable point. Now
+ * a drag that starts anywhere on the scroll content reaches the ScrollView
+ * directly; taps on the empty space around the panel still dismiss (the
+ * centering wrapper is pointerEvents="box-none", so those taps fall through
+ * to the dismiss layer); dismissable={false} still blocks backdrop dismiss
+ * (the temp-password sheet); the 10-e bounded-scroll mechanics are untouched.
  */
 export function GlassModal({
   visible,
@@ -67,45 +81,44 @@ export function GlassModal({
           }
           style={styles.blur}
         />
-        {/* Dim + dismiss pressable above the blur. */}
+        {/* Dim + dismiss surface — a SIBLING BELOW the panel (10-f). The dim
+            token lives here so the backdrop looks identical; the panel above
+            keeps its own touches. */}
         <Pressable
           accessibilityLabel="Close dialog"
-          style={styles.backdrop}
+          style={styles.dismiss}
           onPress={() => {
             if (dismissable && onClose) onClose();
           }}
+        />
+        {/* 10-e structure: KAV → capped cardWrap → panel → bounded
+            ScrollView. iOS lifts the sheet above the keyboard via padding;
+            Android relies on window resizing. box-none lets taps on the
+            empty space fall through to the dismiss layer under the blur. */}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.centerWrap}
+          pointerEvents="box-none"
         >
-          {/* 10-e structure: KAV → capped cardWrap → panel → bounded
-              ScrollView. iOS lifts the sheet above the keyboard via padding;
-              Android relies on window resizing. */}
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            style={styles.kav}
-          >
-            <Pressable
-              accessibilityLabel="Dialog"
-              onPress={() => undefined} // swallow taps so the panel never dismisses
-              style={styles.cardWrap}
-            >
-              <View style={styles.panel}>
-                {title ? (
-                  <GlassText variant="h3" style={styles.title}>
-                    {title}
-                  </GlassText>
-                ) : null}
-                <ScrollView
-                  style={styles.scroll}
-                  contentContainerStyle={styles.scrollContent}
-                  keyboardShouldPersistTaps="handled"
-                  nestedScrollEnabled
-                  bounces={false}
-                >
-                  {children}
-                </ScrollView>
-              </View>
-            </Pressable>
-          </KeyboardAvoidingView>
-        </Pressable>
+          <View style={styles.cardWrap}>
+            <View style={styles.panel}>
+              {title ? (
+                <GlassText variant="h3" style={styles.title}>
+                  {title}
+                </GlassText>
+              ) : null}
+              <ScrollView
+                style={styles.scroll}
+                contentContainerStyle={styles.scrollContent}
+                keyboardShouldPersistTaps="handled"
+                nestedScrollEnabled
+                bounces={false}
+              >
+                {children}
+              </ScrollView>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
       </View>
     </Modal>
   );
@@ -116,15 +129,19 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   blur: StyleSheet.absoluteFill,
-  backdrop: {
-    flex: 1,
+  dismiss: {
+    // Full-screen dismiss surface BELOW the panel (10-f): absolute-fill with
+    // the dim token, so the blurred backdrop stays dimmed exactly as before.
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: colors.modalBackdrop,
+  },
+  centerWrap: {
+    // Centers the capped card; pointerEvents="box-none" is set on the KAV so
+    // taps on the empty space reach the dismiss layer below (10-f).
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: spacing.xl,
-  },
-  kav: {
-    width: '100%',
   },
   cardWrap: {
     width: '100%',
