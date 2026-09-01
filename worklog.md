@@ -443,3 +443,32 @@ Stage Summary:
 - One token deviation, gate-forced and documented: text.secondary #475679 (spec) → #445273 (A3 gate at the worst corner). Everything else in A2 applied verbatim.
 - Build NOT run — no Expo token in this container. Reported per the directive; owner re-supplies token → ONE fresh build from the branch head, artifact downloaded + byte-verified BEFORE any link is posted.
 - No new deps; api/ 0-diff; app.json whitelist-only; 265/265 tests; all four quality gates green.
+---
+Task ID: 10-h
+Agent: Super Z (main agent)
+Task: Phase 10-d Part E — mandatory fresh EAS Android build from the clean tree at 0837ae8 (owner re-supplied the Expo token in-chat), artifact download + full byte-level self-verification, honest PR #10 report. Preceded by the owner-ordered one-file commit 0837ae8.
+
+Work Log:
+- Owner-ordered one-file commit 0837ae8 (pushed 90c2b18..0837ae8): mobile/scripts/contrast-check.ts (+322, 12,405 B) — the A3 gate script that 9a85087's .prettierignore + docs/contrast-report.md reference. Root cause it was missing from 9a85087: a container-LOCAL .git/info/exclude rule "scripts/" (added to keep the session workspace scripts/ dir out of the repo) also matched mobile/scripts/. No TRACKED ignore rule matches it (root .gitignore has .zscripts/ only), so fresh clones were always clean. Staged with git add -f inside a branch-guarded atomic sequence; staged-set asserted to be exactly that one file; tree clean after.
+- Token handling (secrets law): EXPO_TOKEN supplied by the owner in-chat; held ONLY in the session shell env; never written to any file, never committed, never echoed. npx eas-cli whoami → tazla25s-team (Role: Developer) — auth confirmed before submitting.
+- Pre-build state asserted: branch v2/ui-polish, HEAD 0837ae8, 0 dirty files; eas.json preview profile = internal distribution / apk / EXPO_PUBLIC_API_URL pinned; app.json at 0837ae8 carries name ClinIQ, root + androidNavigationBar #4A9FE8, splash #AACCFB; 3 Inter ttf + expo-haptics/expo-font present on the branch.
+- Fresh build submitted: npx eas-cli build --platform android --profile preview --non-interactive --no-wait → build 739027ba-51f4-4f51-b526-2515248fa5a2 (remote keystore Build Credentials rPLiXfvNYP). Build metadata CONFIRMS gitCommitHash 0837ae87deed60c6f2bab525102656b69270d08d — the artifact provably contains 0837ae8.
+- Polled to FINISHED (scripts/phase10e/poll.sh): submitted 2026-09-01T06:03:31Z, completed 06:17:59Z, buildDuration 861,339 ms ≈ 14m 21s. Artifact: https://expo.dev/artifacts/eas/aAham_cl84bayGL6hdT8o9LjaowTpxY27Y48MLpOcGQ.apk
+- Downloaded FRESH (full re-run performed twice so the final log is one clean end-to-end pass) to download/clinIQ-0837ae8-eas-739027ba.apk:
+  - bytes 103,454,643 == HTTP Content-Length == ETag (md5); Last-Modified: Tue, 01 Sep 2026 06:17:55 GMT
+  - SHA-256 4f04ec21f8205ba768ee672b8a7939609472eec1dedad20ecdf7c78cd2434c5d; md5 df48c9227b4f9b96f748f24f86a91d0a
+  - NOT the 10-c stale APK (101,739,555 B): different build id, different byte count, different hashes — the stale-URL iron rule was honored (link posted only AFTER re-download + re-hash of this build's own artifact).
+- Byte-level verification (scripts/phase10e/verify-apk.sh + apk_binchecks.py, log at verify-log.txt) — VERDICT: ALL_PASS:
+  - zip integrity: "No errors detected".
+  - assets/app.config (1060 B): "name":"ClinIQ" ✓; #4A9FE8 ×2 (root backgroundColor + androidNavigationBar) ✓; #AACCFB ×2 (splash + adaptive icon) ✓; old #BFD9F2 = 0 occurrences ✓.
+  - Inter fonts — method note: release AAPT2 obfuscates res/ paths to two-letter names (res/xp.ttf, res/Wj.ttf, res/sL.ttf), so filename greps FAIL by design; correct method = parsing each ttf's internal name table: Inter/Regular 324,796 B (res/xp.ttf), Inter SemiBold/Regular 326,024 B (res/Wj.ttf), Inter/Bold 326,444 B (res/sL.ttf) — each SHA-256-IDENTICAL to the git blob at v2/ui-polish (3/3). The other 20 res ttf = the standard @expo/vector-icons icon set (pre-existing dependency behavior; NO new dependencies — package.json/bun.lock unchanged since 9a85087).
+  - assets/index.android.bundle (Hermes) contains "ExpoHaptics" (1 occurrence > 0) ✓; supplementary: classes*.dex carries 33 "expo/modules/haptics" refs (native module autolinked) ✓.
+  - binary AndroidManifest.xml (AXML, UTF-16LE string-pool scan): com.drbooking.mobile present ✓ (frozen identifier).
+- Spot gates at 0837ae8 (it adds only the script file; no code changes vs 9a85087, whose lint/265-test results stand): bun scripts/contrast-check.ts run from the now-TRACKED path → GATE PASSED (24 pairs, min 4.72:1), docs/contrast-report.md rewrite byte-identical (tree stays clean after the run); bunx tsc --noEmit → 0 errors (type-checking now includes the tracked script).
+- PR #10 report posted: https://github.com/tazla25/DrBooking_App/pull/10#issuecomment-5489798720 — build id/page/artifact URL, commit proof, byte size, Last-Modified, SHA-256 + md5, per-check pass table, fresh-link guarantee, token-handling note. GitHub auth = the credential embedded in the git remote URL (extracted into a shell var, masked in all output, never written anywhere).
+- Container-side artifacts under scripts/phase10e/ (poll.sh, verify-apk.sh, apk_binchecks.py, build.json, verify-log.txt, pr-comment-10h.md) stay OUTSIDE the repo per convention — only mobile/scripts/contrast-check.ts is tracked in-repo.
+
+Stage Summary:
+- Part E CLOSED: fresh EAS build 739027ba-51f4-4f51-b526-2515248fa5a2 from clean 0837ae8, artifact downloaded and byte-verified ALL_PASS (app.config ClinIQ/root #4A9FE8/splash #AACCFB/#BFD9F2 absent; 3 Inter ttf SHA-identical to git blobs; ExpoHaptics in bundle + dex; com.drbooking.mobile in manifest), PR #10 report posted with build id / URL / bytes / Last-Modified / SHA-256 + md5.
+- Zero code changes this round; api/ 0-diff; app.json untouched; no new deps; branch = 0837ae8 + this worklog commit.
+- Token discipline: EXPO_TOKEN and the GitHub remote credential live only in the session shell env / remote URL — neither appears in any file or commit.
