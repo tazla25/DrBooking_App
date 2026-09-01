@@ -132,7 +132,13 @@ const styles = StyleSheet.create({
   dismiss: {
     // Full-screen dismiss surface BELOW the panel (10-f): absolute-fill with
     // the dim token, so the blurred backdrop stays dimmed exactly as before.
-    ...StyleSheet.absoluteFillObject,
+    // (Written out longhand — this SDK's StyleSheet types export only the
+    // opaque `absoluteFill` registered style, not the spreadable object.)
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: colors.modalBackdrop,
   },
   centerWrap: {
