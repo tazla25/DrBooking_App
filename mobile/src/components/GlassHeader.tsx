@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { colors, radii, spacing, typography } from '@/theme';
@@ -15,7 +15,8 @@ interface GlassHeaderProps {
 
 /**
  * Translucent header: circular glass back button on the left, centered title.
- * Sits on the pastel gradient — no opaque bar.
+ * Sits on the pastel gradient — no opaque bar. Phase 10-c: the circular
+ * buttons are Pressables with a visible pressed state (opacity 0.8).
  */
 export function GlassHeader({ title, back = true, right }: GlassHeaderProps) {
   const router = useRouter();
@@ -28,14 +29,14 @@ export function GlassHeader({ title, back = true, right }: GlassHeaderProps) {
       <View style={styles.row}>
         <View style={styles.side}>
           {showBack ? (
-            <TouchableOpacity
+            <Pressable
               accessibilityLabel="Go back"
               accessibilityRole="button"
               onPress={() => router.back()}
-              style={styles.circle}
+              style={({ pressed }) => [styles.circle, pressed && styles.circlePressed]}
             >
               <Ionicons name="chevron-back" size={22} color={colors.text.primary} />
-            </TouchableOpacity>
+            </Pressable>
           ) : null}
         </View>
         <Text style={styles.title} numberOfLines={1}>
@@ -47,7 +48,10 @@ export function GlassHeader({ title, back = true, right }: GlassHeaderProps) {
   );
 }
 
-/** Circular translucent glass button used for back / menu / actions. */
+/**
+ * Circular translucent glass button used for back / menu / actions.
+ * Phase 10-c: Pressable with a visible pressed state (opacity 0.8).
+ */
 export function GlassCircleButton({
   icon,
   onPress,
@@ -58,14 +62,14 @@ export function GlassCircleButton({
   accessibilityLabel: string;
 }) {
   return (
-    <TouchableOpacity
+    <Pressable
       accessibilityLabel={accessibilityLabel}
       accessibilityRole="button"
       onPress={onPress}
-      style={styles.circle}
+      style={({ pressed }) => [styles.circle, pressed && styles.circlePressed]}
     >
       <Ionicons name={icon} size={20} color={colors.text.primary} />
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 
@@ -99,5 +103,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.glass.chip,
     borderWidth: 1,
     borderColor: colors.glass.border,
+  },
+  circlePressed: {
+    opacity: 0.8,
   },
 });

@@ -25,6 +25,7 @@ import {
   type MyAppointment,
 } from '@/lib/appointments';
 import { ApiError, friendlyMessage, toFriendlyMessage } from '@/lib/errors';
+import { hapticSelection, hapticSuccess } from '@/lib/haptics';
 import { formatDateISO } from '@/lib/format';
 import { useAppointments } from '@/hooks/useAppointments';
 import { colors, radii, spacing, typography } from '@/theme';
@@ -74,6 +75,7 @@ export default function MyAppointmentsScreen() {
       const token = cancelTarget.queueNumber;
       list.updateItems((items) => items.filter((a) => a.id !== cancelTarget.id));
       setCancelTarget(null);
+      hapticSuccess();
       show(`Token #${token} cancelled`, 'success');
     } catch (err) {
       if (
@@ -161,7 +163,10 @@ export default function MyAppointmentsScreen() {
             <GlassButton
               key={r.key}
               label={r.label}
-              onPress={() => setRange(r.key)}
+              onPress={() => {
+                if (range !== r.key) hapticSelection();
+                setRange(r.key);
+              }}
               disabled={list.loading}
               style={[styles.segmentButton, range === r.key && styles.segmentActive]}
             />
@@ -411,15 +416,26 @@ const styles = StyleSheet.create({
   },
   segmentButton: { flex: 1 },
   segmentActive: {
-    backgroundColor: 'rgba(77, 159, 222, 0.28)',
-    borderColor: 'rgba(77, 159, 222, 0.55)',
+    backgroundColor: colors.interactive.selectedBg,
+    borderColor: colors.interactive.selectedBorder,
   },
   retryRow: { alignSelf: 'flex-start' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  list: { paddingHorizontal: spacing.base, paddingBottom: spacing.xxl, gap: spacing.md },
+  list: {
+    paddingHorizontal: spacing.base,
+    // B4: floating glass tab bar (~48px + safe inset) + breathing room. 96 is
+    // the ONE documented literal (worklog 10-g) — the largest spacing token
+    // (48) does not reach it.
+    paddingBottom: 96,
+    gap: spacing.md,
+  },
   card: { gap: spacing.sm },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  token: { ...typography.h2, color: '#2D6FB4', fontWeight: '800' },
+  token: {
+    ...typography.h2,
+    color: colors.status.CALLED.fg,
+    fontWeight: '800',
+  },
   cardMid: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -434,7 +450,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.xs,
     backgroundColor: colors.glass.nested,
-    borderRadius: radii.pill,
+    borderRadius: radii.chip,
     borderWidth: 1,
     borderColor: colors.glass.border,
     paddingHorizontal: spacing.md,
@@ -444,7 +460,7 @@ const styles = StyleSheet.create({
   clinic: { ...typography.bodySemi, color: colors.text.primary },
   meta: { ...typography.caption, color: colors.text.secondary },
   actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
-  actionButton: { flex: 1, minHeight: 42 },
+  actionButton: { flex: 1, minHeight: 44 },
   ratedRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -452,13 +468,13 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     alignSelf: 'flex-start',
     backgroundColor: 'rgba(245, 166, 35, 0.14)',
-    borderRadius: radii.pill,
+    borderRadius: radii.chip,
     borderWidth: 1,
     borderColor: 'rgba(245, 166, 35, 0.35)',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
   },
-  ratedText: { ...typography.captionSemi, color: '#B27415' },
+  ratedText: { ...typography.captionSemi, color: colors.status.PENDING.fg },
   cancelText: { ...typography.body, color: colors.text.secondary, textAlign: 'center' },
   feedbackIntro: { ...typography.body, color: colors.text.secondary, textAlign: 'center' },
   commentWrap: { marginTop: spacing.sm },

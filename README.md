@@ -307,6 +307,10 @@ gitignored/external by construction, and `mobile/.env*` stays gitignored.
   bootstrap seed), Vercel deploy runbook, EAS build profiles (preview APK +
   production AAB), FCM v1 push credential setup, on-device walkthrough,
   handover/secrets/backup docs.**
+- **Done — Phase 10 (UI polish):** real glassmorphism (low-alpha band so
+  stacked panels stay translucent), radius unification law (22/16/14/12/16,
+  pill reserved for true circles), owner brand assets (app icon, adaptive
+  icon, splash, favicon, aurora wallpaper), blurred modal backdrops.**
 - **Next — v1.1 backlog:** `DELETE /api/devices` (push deregistration on
   logout — see the known limitation in `mobile/README.md`), Redis-backed
   rate limiting behind a load balancer, Play Store release track.

@@ -26,6 +26,16 @@ jest.mock('expo-secure-store', () => {
   };
 });
 
+jest.mock('expo-haptics', () => {
+  return {
+    __esModule: true,
+    selectionAsync: jest.fn(async () => undefined),
+    notificationAsync: jest.fn(async () => undefined),
+    NotificationFeedbackType: { Success: 'success', Warning: 'warning', Error: 'error' },
+    ImpactFeedbackStyle: { Light: 'light', Medium: 'medium', Heavy: 'heavy' },
+  };
+});
+
 jest.mock('expo-router', () => {
   const router = {
     push: jest.fn(),

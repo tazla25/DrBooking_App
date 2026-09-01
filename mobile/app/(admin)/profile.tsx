@@ -96,7 +96,7 @@ export default function AdminProfileScreen() {
         </GlassCard>
 
         <Text style={styles.version}>
-          Dr Booking · Phase 8
+          ClinIQ · Phase 10
           {Constants.expoConfig?.version ? ` · v${Constants.expoConfig.version}` : ''}
         </Text>
       </View>
@@ -113,19 +113,23 @@ const styles = StyleSheet.create({
   chipRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   roleChip: {
     backgroundColor: 'rgba(77, 159, 222, 0.20)',
-    borderRadius: radii.pill,
+    borderRadius: radii.chip,
     borderWidth: 1,
     borderColor: 'rgba(77, 159, 222, 0.35)',
     paddingHorizontal: spacing.md,
     paddingVertical: 4,
   },
-  roleChipText: { ...typography.micro, color: '#2D6FB4', letterSpacing: 0.4 },
+  roleChipText: {
+    ...typography.micro,
+    color: colors.status.CALLED.fg,
+    letterSpacing: 0.4,
+  },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   metaLabel: { ...typography.caption, color: colors.text.secondary, width: 110 },
   metaValue: { ...typography.bodySemi, color: colors.text.primary, flex: 1 },
   mustChange: {
     ...typography.caption,
-    color: '#B27415',
+    color: colors.status.PENDING.fg,
     backgroundColor: 'rgba(245, 166, 35, 0.14)',
     borderWidth: 1,
     borderColor: 'rgba(245, 166, 35, 0.30)',

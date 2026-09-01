@@ -15,10 +15,12 @@ import {
 } from '@/components';
 import { api } from '@/lib/api';
 import { availabilityClosedMessage, bookAppointment } from '@/lib/appointments';
+import { hapticSelection, hapticSuccess } from '@/lib/haptics';
 import { ApiError, friendlyMessage, toFriendlyMessage } from '@/lib/errors';
 import { dayName, formatDayMonth, formatDateISO, formatFee } from '@/lib/format';
 import { dayOfWeekISO, firstDateForDay, istTodayISO, nextDates } from '@/lib/time';
 import { useAvailability } from '@/hooks/useAvailability';
+import { AnimatedChip } from '@/components/motion';
 import { colors, radii, spacing, typography } from '@/theme';
 import type { DoctorDetail, ScheduleView } from '@/lib/types';
 
@@ -95,6 +97,7 @@ export default function BookingScreen() {
     setBookingError(null);
     try {
       const result = await bookAppointment(scheduleId, date);
+      hapticSuccess(); // the booking-success moment (fires once, on the 201)
       router.replace({
         pathname: '/booking-success',
         params: {
@@ -200,6 +203,7 @@ export default function BookingScreen() {
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
+                style={styles.dateRowScroll}
                 contentContainerStyle={styles.dateRow}
               >
                 {dates.map((d) => {
@@ -207,13 +211,19 @@ export default function BookingScreen() {
                   const isScheduleDay = schedule !== null && schedule.dayOfWeek === dow;
                   const selected = d === date;
                   return (
-                    <Pressable
+                    <AnimatedChip
                       key={d}
-                      accessibilityRole="button"
+                      active={selected}
+                      bg={[colors.glass.chip, colors.navy]}
+                      border={[colors.glass.border, colors.navy]}
+                      radius={radii.inner}
+                      onPress={() => {
+                        if (d !== date) hapticSelection();
+                        setDate(d);
+                      }}
                       accessibilityLabel={`Select ${formatDateISO(d)}`}
                       accessibilityState={{ selected }}
-                      onPress={() => setDate(d)}
-                      style={[styles.dateChip, selected && styles.dateChipActive]}
+                      style={styles.dateChip}
                     >
                       <Text style={[styles.dateWeekday, selected && styles.dateTextActive]}>
                         {dayName(dow, true)}
@@ -226,9 +236,11 @@ export default function BookingScreen() {
                       ) : (
                         <View style={styles.dayDotSpacer} />
                       )}
-                    </Pressable>
+                    </AnimatedChip>
                   );
                 })}
+                {/* B1 trailing runway — width = the parent scroll padding. */}
+                <View style={styles.dateTrailing} />
               </ScrollView>
 
               {/* -- availability -------------------------------------------------- */}
@@ -352,7 +364,16 @@ function ScheduleOption({
   onPress: () => void;
 }) {
   return (
-    <Pressable accessibilityRole="button" accessibilityState={{ selected }} onPress={onPress}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      onPress={() => {
+        if (!selected) hapticSelection();
+        onPress();
+      }}
+      android_ripple={{ color: colors.ripple, borderless: false, foreground: true }}
+      style={({ pressed }) => [styles.scheduleWrap, pressed && styles.scheduleWrapPressed]}
+    >
       <GlassCard padded style={[styles.scheduleCard, selected && styles.scheduleCardSelected]}>
         <View style={styles.scheduleHead}>
           <Text style={styles.scheduleDay}>{dayName(schedule.dayOfWeek)}</Text>
@@ -447,24 +468,27 @@ const styles = StyleSheet.create({
   },
   scheduleHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   scheduleDay: { ...typography.h3, color: colors.text.primary },
-  scheduleTime: { ...typography.bodySemi, color: '#2D6FB4' },
+  scheduleTime: { ...typography.bodySemi, color: colors.status.CALLED.fg },
+  scheduleWrap: {
+    borderRadius: radii.card,
+    overflow: 'hidden', // ripple + card content clip to the rounded shape
+  },
+  scheduleWrapPressed: {
+    opacity: 0.9,
+  },
   clinic: { ...typography.bodySemi, color: colors.text.primary, marginTop: 2 },
   address: { ...typography.caption, color: colors.text.secondary },
-  dateRow: { gap: spacing.sm, paddingRight: spacing.base },
+  dateRow: { gap: spacing.sm, paddingHorizontal: spacing.base },
+  // B1 full-bleed: negative margin = the vertical scroll's padding.
+  dateRowScroll: { marginHorizontal: -spacing.base },
+  dateTrailing: { width: spacing.base },
+  // dateChip keeps structure only — bg/border crossfade in AnimatedChip.
   dateChip: {
     alignItems: 'center',
-    backgroundColor: colors.glass.chip,
-    borderRadius: radii.inner,
-    borderWidth: 1,
-    borderColor: colors.glass.border,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     minWidth: 64,
     gap: 2,
-  },
-  dateChipActive: {
-    backgroundColor: colors.navy,
-    borderColor: colors.navy,
   },
   dateWeekday: { ...typography.micro, color: colors.text.secondary, textTransform: 'uppercase' },
   dateDay: { ...typography.bodySemi, color: colors.text.primary },

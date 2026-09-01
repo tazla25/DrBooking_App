@@ -110,18 +110,35 @@ mobile/
 - **Envelope**: `{ ok:true, data } | { ok:false, error:{ code, message } }` everywhere.
 - **api/ is frozen** in mobile phases — API gaps go in the PR description.
 
-## Design system — "glassmorphism pastel blue-purple"
+## Design system — "glassmorphism pastel blue-purple" (Phase 10 revision)
 
-- Full-screen diagonal gradient `#BFD9F2 → #C7E3EC → #CBC6E8` (`GlassScreen`)
-- Translucent white glass cards: 50% alpha, radius 24, 1px white border,
-  navy shadow blur 24 (`GlassCard`, `nested` for inner panels)
-- Pill text fields with left icon + password toggle (`GlassTextField`)
-- Primary CTA: full-radius pill, `#6EC1F5 → #4D9FDE` gradient, white semibold,
+- Full-screen **vivid diagonal canvas** `#4A9FE8 → #5E7BE0 → #7C63D8`
+  (start/end diagonally opposite) plus two soft white radial glows (top-left,
+  bottom-right) — pure vector, no wallpaper (`GlassScreen`); the old
+  `assets/aurora-bg.png` stays in the repo, unused
+- **Raised glass** — alphas lifted for layer separation against the vivid
+  canvas: card 66% · cardSoft 52% · nested 34% · field 58% · chip 46%
+  (borders 60–65%, tab bar 72%, header 55%), navy shadow alpha .22,
+  elevation 10 — `src/theme/tokens.ts`; text contrast is hard-gated at 4.5:1
+  by `scripts/contrast-check.ts` (report: `docs/contrast-report.md`)
+- **Radius law**: card 22 · inner 16 · field 14 · chip 12 · button 16 ·
+  pill 999 (true circles only: avatar, round icon buttons, availability
+  toggle). Buttons are rounded-rects, NOT capsules.
+- Text fields with left icon + password toggle (`GlassTextField`)
+- Primary CTA: `#6EC1F5 → #4D9FDE` gradient rounded-rect, white semibold,
   blue glow, pressed/loading/disabled states (`PrimaryButton`)
-- Navy secondary pill (`NavyButton`), glass/destructive tones (`GlassButton`)
+- Navy secondary (`NavyButton`), glass/destructive tones (`GlassButton`)
 - Translucent header with circular glass back button (`GlassHeader`)
-- Status chips: CONFIRMED green · CALLED blue · COMPLETED gray-green ·
-  CANCELLED red · NO_SHOW gray · PENDING orange (`StatusChip`)
+- Status chips (radius 12): CONFIRMED green · CALLED blue · COMPLETED
+  gray-green · CANCELLED red · NO_SHOW gray · PENDING orange (`StatusChip`)
+- **Modals blur their backdrop** (`GlassModal`): expo-blur BlurView
+  (Android `experimentalBlurMethod="dimezisBlurView"`, iOS native) under a
+  60% navy dim + near-opaque 92% white panel, radius 22 — background text is
+  never readable through a sheet
+- Brand assets: `assets/icon-master.png` (3D calendar + cross + checkmark),
+  `assets/splash-symbol.png` (stethoscope + cross), derived icon /
+  adaptive-icon foreground / monochrome / splash / favicon — see
+  `scripts/derive-brand-assets.py` in the repo root (untracked sandbox tooling)
 - Typography scale (display/h1/h2/body/caption) + 4px spacing scale as tokens
 
 **Review it in-app:** sign in (dev build) → Profile tab → _Design system demo_

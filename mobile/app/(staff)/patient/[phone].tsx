@@ -236,7 +236,13 @@ const styles = StyleSheet.create({
   body: { flex: 1, padding: spacing.base, gap: spacing.base },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   card: { gap: spacing.md },
-  listContent: { paddingBottom: spacing.xxxl, gap: spacing.base },
+  listContent: {
+    // B4: floating glass tab bar (~48px + safe inset) + breathing room. 96 is
+    // the ONE documented literal (worklog 10-g) — the largest spacing token
+    // (48) does not reach it.
+    paddingBottom: 96,
+    gap: spacing.base,
+  },
 
   identityRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   identity: { flex: 1, gap: spacing.xs },
@@ -253,20 +259,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.xs,
     backgroundColor: 'rgba(245, 166, 35, 0.18)',
-    borderRadius: radii.pill,
+    borderRadius: radii.chip,
     borderWidth: 1,
     borderColor: 'rgba(245, 166, 35, 0.35)',
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
   },
-  importantChipText: { ...typography.micro, color: '#B27415', letterSpacing: 0.4 },
+  importantChipText: {
+    ...typography.micro,
+    color: colors.status.PENDING.fg,
+    letterSpacing: 0.4,
+  },
   date: { ...typography.micro, color: colors.text.secondary, marginLeft: 'auto' },
   noteText: { ...typography.body, color: colors.text.primary },
   authorRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   authorName: { ...typography.caption, color: colors.text.secondary, flexShrink: 1 },
   roleChip: {
     backgroundColor: colors.glass.nested,
-    borderRadius: radii.pill,
+    borderRadius: radii.chip,
     borderWidth: 1,
     borderColor: colors.glass.border,
     paddingHorizontal: spacing.sm,

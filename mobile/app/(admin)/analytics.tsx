@@ -1,6 +1,6 @@
 import * as Sharing from 'expo-sharing';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   Avatar,
   ErrorBanner,
@@ -28,6 +28,8 @@ import { formatDayMonth, formatFee } from '@/lib/format';
 import { addDaysISO, istTodayISO } from '@/lib/time';
 import { validateExportRange } from '@/lib/validation';
 import { useAnalyticsSummary, useRevenueSeries } from '@/hooks/useAdminAnalytics';
+import { hapticSelection } from '@/lib/haptics';
+import { AnimatedChip } from '@/components/motion';
 import { colors, radii, spacing, typography } from '@/theme';
 
 const WINDOWS: { key: AnalyticsWindowKey; label: string }[] = [
@@ -169,31 +171,39 @@ export default function AdminAnalyticsScreen() {
               {doctors.map((doc) => {
                 const selected = doc.id === doctorId;
                 return (
-                  <Pressable
+                  <AnimatedChip
                     key={doc.id}
-                    accessibilityRole="button"
+                    active={selected}
+                    bg={[colors.glass.chip, colors.interactive.selectedBg]}
+                    border={[colors.glass.border, colors.interactive.selectedBorder]}
+                    onPress={() => {
+                      if (!selected) hapticSelection();
+                      setDoctorId(doc.id);
+                    }}
                     accessibilityLabel={`Select Dr. ${doc.fullName}`}
-                    onPress={() => setDoctorId(doc.id)}
-                    style={[styles.doctorChip, selected && styles.doctorChipSelected]}
+                    accessibilityState={{ selected }}
+                    style={styles.doctorChip}
                   >
-                    <Avatar name={doc.fullName} size={26} />
-                    <View style={styles.chipTextWrap}>
-                      <Text
-                        style={[styles.chipName, selected && styles.chipNameSelected]}
-                        numberOfLines={1}
-                      >
-                        Dr. {doc.fullName}
-                      </Text>
-                      {doc.specialization ? (
+                    <View style={styles.doctorChipRow}>
+                      <Avatar name={doc.fullName} size={26} />
+                      <View style={styles.chipTextWrap}>
                         <Text
-                          style={[styles.chipSpec, selected && styles.chipSpecSelected]}
+                          style={[styles.chipName, selected && styles.chipNameSelected]}
                           numberOfLines={1}
                         >
-                          {doc.specialization}
+                          Dr. {doc.fullName}
                         </Text>
-                      ) : null}
+                        {doc.specialization ? (
+                          <Text
+                            style={[styles.chipSpec, selected && styles.chipSpecSelected]}
+                            numberOfLines={1}
+                          >
+                            {doc.specialization}
+                          </Text>
+                        ) : null}
+                      </View>
                     </View>
-                  </Pressable>
+                  </AnimatedChip>
                 );
               })}
             </ScrollView>
@@ -223,19 +233,25 @@ export default function AdminAnalyticsScreen() {
             <Text style={styles.sectionTitle}>Revenue</Text>
             <View style={styles.daysChips}>
               {REVENUE_DAY_OPTIONS.map((option) => (
-                <Pressable
+                <AnimatedChip
                   key={option}
-                  accessibilityRole="button"
+                  active={days === option}
+                  bg={[colors.glass.chip, colors.interactive.selectedBg]}
+                  border={[colors.glass.border, colors.interactive.selectedBorder]}
+                  onPress={() => {
+                    if (days !== option) hapticSelection();
+                    setDays(option);
+                  }}
                   accessibilityLabel={`Last ${option} days`}
-                  onPress={() => setDays(option)}
-                  style={[styles.daysChip, days === option && styles.daysChipSelected]}
+                  accessibilityState={{ selected: days === option }}
+                  style={styles.daysChip}
                 >
                   <Text
                     style={[styles.daysChipText, days === option && styles.daysChipTextSelected]}
                   >
                     {option}d
                   </Text>
-                </Pressable>
+                </AnimatedChip>
               ))}
             </View>
           </View>
@@ -336,19 +352,25 @@ function SummaryPanel({
     <View style={styles.summaryWrap}>
       <View style={styles.windowChips}>
         {WINDOWS.map((w) => (
-          <Pressable
+          <AnimatedChip
             key={w.key}
-            accessibilityRole="button"
+            active={window === w.key}
+            bg={[colors.glass.chip, colors.interactive.selectedBg]}
+            border={[colors.glass.border, colors.interactive.selectedBorder]}
+            onPress={() => {
+              if (window !== w.key) hapticSelection();
+              onWindow(w.key);
+            }}
             accessibilityLabel={w.label}
-            onPress={() => onWindow(w.key)}
-            style={[styles.windowChip, window === w.key && styles.windowChipSelected]}
+            accessibilityState={{ selected: window === w.key }}
+            style={styles.windowChip}
           >
             <Text
               style={[styles.windowChipText, window === w.key && styles.windowChipTextSelected]}
             >
               {w.label}
             </Text>
-          </Pressable>
+          </AnimatedChip>
         ))}
       </View>
       <Text style={styles.rangeHint}>{ranges[window]}</Text>
@@ -433,48 +455,41 @@ function RevenueChart({ series }: { series: { date: string; count: number; reven
 }
 
 const styles = StyleSheet.create({
-  body: { padding: spacing.base, paddingBottom: spacing.xxxl, gap: spacing.base },
+  body: {
+    padding: spacing.base,
+    // B4: floating glass tab bar (~48px + safe inset) + breathing room. 96 is
+    // the ONE documented literal (worklog 10-g) — the largest spacing token
+    // (48) does not reach it.
+    paddingBottom: 96,
+    gap: spacing.base,
+  },
   card: { gap: spacing.md },
   sectionTitle: { ...typography.h3, color: colors.text.primary },
   pickerRow: { gap: spacing.sm, paddingRight: spacing.sm },
   pickerEmpty: { ...typography.caption, color: colors.text.secondary },
   doctorChip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  doctorChipRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.pill,
-    backgroundColor: colors.glass.chip,
-    borderWidth: 1,
-    borderColor: colors.glass.border,
-  },
-  doctorChipSelected: {
-    backgroundColor: 'rgba(77, 159, 222, 0.20)',
-    borderColor: colors.ctaGradient.end,
   },
   chipTextWrap: { maxWidth: 150, gap: 1 },
   chipName: { ...typography.captionSemi, color: colors.text.primary },
-  chipNameSelected: { color: '#2D6FB4' },
+  chipNameSelected: { color: colors.interactive.selectedFg },
   chipSpec: { ...typography.micro, color: colors.text.secondary },
-  chipSpecSelected: { color: '#2D6FB4' },
+  chipSpecSelected: { color: colors.interactive.selectedFg },
   blockLoader: { paddingVertical: spacing.xl },
   summaryWrap: { gap: spacing.md },
   windowChips: { flexDirection: 'row', gap: spacing.sm },
   windowChip: {
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.xs,
-    borderRadius: radii.pill,
-    backgroundColor: colors.glass.chip,
-    borderWidth: 1,
-    borderColor: colors.glass.border,
-  },
-  windowChipSelected: {
-    backgroundColor: 'rgba(77, 159, 222, 0.20)',
-    borderColor: colors.ctaGradient.end,
   },
   windowChipText: { ...typography.captionSemi, color: colors.text.secondary },
-  windowChipTextSelected: { color: '#2D6FB4' },
+  windowChipTextSelected: { color: colors.interactive.selectedFg },
   rangeHint: { ...typography.micro, color: colors.text.secondary },
   tileGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   tile: {
@@ -489,18 +504,18 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   tileHighlighted: {
-    backgroundColor: 'rgba(77, 159, 222, 0.20)',
-    borderColor: colors.ctaGradient.end,
+    backgroundColor: colors.interactive.selectedBg,
+    borderColor: colors.interactive.selectedBorder,
   },
   tileValue: { ...typography.h3, color: colors.text.primary },
-  tileValueHighlighted: { color: '#2D6FB4' },
+  tileValueHighlighted: { color: colors.interactive.selectedFg },
   tileLabel: {
     ...typography.micro,
     color: colors.text.secondary,
     textTransform: 'uppercase',
     letterSpacing: 0.4,
   },
-  tileLabelHighlighted: { color: '#2D6FB4' },
+  tileLabelHighlighted: { color: colors.interactive.selectedFg },
   chartHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -511,17 +526,9 @@ const styles = StyleSheet.create({
   daysChip: {
     paddingHorizontal: spacing.md,
     paddingVertical: 2,
-    borderRadius: radii.pill,
-    backgroundColor: colors.glass.chip,
-    borderWidth: 1,
-    borderColor: colors.glass.border,
-  },
-  daysChipSelected: {
-    backgroundColor: 'rgba(77, 159, 222, 0.20)',
-    borderColor: colors.ctaGradient.end,
   },
   daysChipText: { ...typography.micro, color: colors.text.secondary },
-  daysChipTextSelected: { color: '#2D6FB4' },
+  daysChipTextSelected: { color: colors.interactive.selectedFg },
   chartRow: { alignItems: 'flex-end', gap: BAR_GAP, paddingVertical: spacing.sm },
   barColumn: { width: BAR_WIDTH, alignItems: 'center', gap: 4 },
   barStack: { height: BAR_MAX_HEIGHT, justifyContent: 'flex-end' },
@@ -531,6 +538,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.ctaGradient.end,
   },
   barEmpty: { backgroundColor: 'rgba(90, 107, 140, 0.30)' },
+  // Deliberate override (Phase 10-c exception): 9px chart labels stay literal
+  // — dense bar-chart captions must not grow to the 11px micro token.
   barLabel: { ...typography.micro, color: colors.text.secondary, fontSize: 9, lineHeight: 12 },
   barLabelGhost: { ...typography.micro, color: 'transparent', fontSize: 9, lineHeight: 12 },
   chartCaption: { ...typography.micro, color: colors.text.secondary },

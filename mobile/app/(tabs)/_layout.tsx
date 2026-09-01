@@ -2,20 +2,22 @@ import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import { BlurView } from 'expo-blur';
 import { StyleSheet } from 'react-native';
-import { colors } from '@/theme';
+import { hapticSelection } from '@/lib/haptics';
+import { colors, typography } from '@/theme';
 
 /** Patient tab bar — translucent glass with a real blur behind it. */
 export default function TabsLayout() {
   return (
     <Tabs
+      screenListeners={{ tabPress: () => hapticSelection() }}
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.ctaGradient.end,
         tabBarInactiveTintColor: colors.text.secondary,
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+        tabBarLabelStyle: { ...typography.micro },
         tabBarStyle: {
           position: 'absolute',
-          backgroundColor: 'rgba(255, 255, 255, 0.38)',
+          backgroundColor: colors.glass.tabBar, // Phase 10 token (0.55)
           borderTopColor: colors.glass.border,
           borderTopWidth: 1,
         },

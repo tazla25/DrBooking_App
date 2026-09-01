@@ -1,7 +1,7 @@
 import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, Platform, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   Avatar,
   EmptyState,
@@ -26,7 +26,8 @@ import {
   type CompounderRecord,
 } from '@/lib/staff';
 import { isValidName, isValidPhone, normalizePhoneInput } from '@/lib/validation';
-import { colors, radii, spacing, typography } from '@/theme';
+import { hapticSelection, hapticWarning } from '@/lib/haptics';
+import { colors, fontFamily, radii, spacing, typography } from '@/theme';
 
 /**
  * Staff console — Team tab (DOCTOR ONLY; hidden from compounders in the tab
@@ -133,6 +134,7 @@ export default function StaffTeamScreen() {
     try {
       await Clipboard.setStringAsync(created.tempPassword);
       setCopied(true);
+      hapticSelection();
       show('Temp password copied', 'success');
     } catch {
       show('Could not access the clipboard — copy it manually', 'error');
@@ -155,6 +157,7 @@ export default function StaffTeamScreen() {
     try {
       await deactivateCompounder(deactivateTarget.id);
       setDeactivateTarget(null);
+      hapticWarning(); // destructive confirmation
       show(`${deactivateTarget.name} deactivated — sessions revoked`, 'success');
       await refresh(); // refetch-after-success
     } catch (err) {
@@ -274,13 +277,23 @@ export default function StaffTeamScreen() {
             />
             <View style={styles.confirmRow}>
               <Text style={styles.confirmLabel}>I&apos;ve saved it</Text>
-              <Ionicons
-                name={savedConfirmed ? 'checkbox' : 'square-outline'}
-                size={22}
-                color={savedConfirmed ? colors.success : colors.text.secondary}
-                onPress={() => setSavedConfirmed((v) => !v)}
-                suppressHighlightUnderlay
-              />
+              <Pressable
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: savedConfirmed }}
+                accessibilityLabel="I've saved it"
+                onPress={() => {
+                  hapticSelection();
+                  setSavedConfirmed((v) => !v);
+                }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                style={({ pressed }) => [styles.checkboxWrap, pressed && styles.checkboxPressed]}
+              >
+                <Ionicons
+                  name={savedConfirmed ? 'checkbox' : 'square-outline'}
+                  size={22}
+                  color={savedConfirmed ? colors.success : colors.text.secondary}
+                />
+              </Pressable>
             </View>
             <PrimaryButton
               label="Close forever"
@@ -355,7 +368,7 @@ function CompounderRow({
       <View style={styles.metaRow}>
         {active && compounder.mustChangePassword ? (
           <View style={styles.pendingChip}>
-            <Ionicons name="key-outline" size={12} color="#B27415" />
+            <Ionicons name="key-outline" size={12} color={colors.status.PENDING.fg} />
             <Text style={styles.pendingChipText}>Must change password — never signed in</Text>
           </View>
         ) : null}
@@ -379,7 +392,14 @@ function CompounderRow({
 const styles = StyleSheet.create({
   body: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  listContent: { padding: spacing.base, paddingBottom: spacing.xxxl, gap: spacing.base },
+  listContent: {
+    padding: spacing.base,
+    // B4: floating glass tab bar (~48px + safe inset) + breathing room. 96 is
+    // the ONE documented literal (worklog 10-g) — the largest spacing token
+    // (48) does not reach it.
+    paddingBottom: 96,
+    gap: spacing.base,
+  },
   card: { gap: spacing.sm },
 
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
@@ -392,7 +412,7 @@ const styles = StyleSheet.create({
   joined: { ...typography.micro, color: colors.text.secondary },
 
   statusChip: {
-    borderRadius: radii.pill,
+    borderRadius: radii.chip,
     borderWidth: 1,
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
@@ -401,24 +421,30 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(61, 178, 115, 0.18)',
     borderColor: 'rgba(61, 178, 115, 0.35)',
   },
-  activeChipText: { ...typography.micro, color: '#2E7D5B', letterSpacing: 0.4 },
+  activeChipText: {
+    ...typography.micro,
+    color: colors.status.CONFIRMED.fg,
+    letterSpacing: 0.4,
+  },
   goneChip: { backgroundColor: 'rgba(138, 147, 166, 0.20)', borderColor: colors.glass.border },
-  goneChipText: { ...typography.micro, color: '#5F6B80', letterSpacing: 0.4 },
+  goneChipText: { ...typography.micro, color: colors.status.NO_SHOW.fg, letterSpacing: 0.4 },
 
   pendingChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
     backgroundColor: 'rgba(245, 166, 35, 0.18)',
-    borderRadius: radii.pill,
+    borderRadius: radii.chip,
     borderWidth: 1,
     borderColor: 'rgba(245, 166, 35, 0.35)',
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
   },
-  pendingChipText: { ...typography.micro, color: '#B27415' },
+  pendingChipText: { ...typography.micro, color: colors.status.PENDING.fg },
 
-  deactivateBtn: { alignSelf: 'flex-start', minHeight: 38, paddingHorizontal: spacing.lg },
+  deactivateBtn: { alignSelf: 'flex-start', minHeight: 44, paddingHorizontal: spacing.lg },
+  checkboxWrap: { padding: spacing.xs },
+  checkboxPressed: { opacity: 0.6 },
 
   // add modal
   addHint: { ...typography.caption, color: colors.text.secondary, textAlign: 'center' },
@@ -436,15 +462,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.base,
   },
   tempPassword: {
-    fontSize: 26,
-    lineHeight: 34,
-    fontWeight: '700',
+    ...typography.h2, // was a 26px literal — Phase 10-c token sweep
     color: colors.text.primary,
     letterSpacing: 1.5,
-    // C3: monospace per platform — 'Courier' is iOS-only; Android renders it
-    // as the default font (falling back via Platform.select keeps the one-time
-    // password unambiguous on both platforms).
-    fontFamily: Platform.select({ ios: 'Courier', android: 'monospace' }),
+    // One-time password stays UNAMBIGUOUS: platform monospace via the
+    // fontFamily.mono token ('Courier' iOS / 'monospace' Android).
+    fontFamily: fontFamily.mono,
   },
   tempWarning: { ...typography.caption, color: colors.destructive, textAlign: 'center' },
   confirmRow: {

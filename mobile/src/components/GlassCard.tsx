@@ -12,9 +12,13 @@ interface GlassCardProps {
 }
 
 /**
- * Translucent white glass panel: 50% white alpha, radius 24, 1px white border,
- * soft navy shadow (rgba(23,38,74,0.12) blur 24).
- * `nested` renders the inner-variant panel (32% alpha, radius 16).
+ * Translucent white glass panel (Phase 10 glass band: card alpha .34 / nested
+ * .18 from tokens, radius card 22 / inner 16, 1px white border, soft navy
+ * shadow). `nested` renders the inner-variant panel.
+ *
+ * Phase 10-b FIX A: both variants set overflow:'hidden' — Android does NOT
+ * clip children to a parent's borderRadius by default, so chips, strips,
+ * switches and scroll content could paint over the rounded corners.
  */
 export function GlassCard({ children, style, nested = false, padded = false }: GlassCardProps) {
   return (
@@ -30,6 +34,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.card,
     borderWidth: 1,
     borderColor: colors.glass.border,
+    overflow: 'hidden', // FIX A: children clip to the rounded shape (Android)
     ...colors.shadow.card,
   },
   nested: {
@@ -37,6 +42,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.inner,
     borderWidth: 1,
     borderColor: colors.glass.border,
+    overflow: 'hidden', // FIX A: nested panels clip too
   },
   padded: {
     padding: spacing.lg,

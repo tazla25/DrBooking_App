@@ -14,6 +14,7 @@ import { ErrorBanner, GlassCard, GlassScreen, GlassTextField, PrimaryButton } fr
 import { ApiError, friendlyMessage } from '@/lib/errors';
 import { isValidName, isValidPassword, isValidPhone, normalizePhoneInput } from '@/lib/validation';
 import { loginWith, registerAccount } from '@/store/auth';
+import { hapticSelection } from '@/lib/haptics';
 import { colors, radii, spacing, typography } from '@/theme';
 
 type RegisterRole = 'PATIENT' | 'DOCTOR';
@@ -247,8 +248,17 @@ function RolePill({
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ selected: active }}
-      onPress={onPress}
-      style={[styles.rolePill, active && styles.rolePillActive]}
+      onPress={() => {
+        if (!active) hapticSelection();
+        onPress();
+      }}
+      android_ripple={{ color: colors.ripple, borderless: false, foreground: true }}
+      style={({ pressed }) => [
+        styles.rolePill,
+        { overflow: 'hidden' },
+        active && styles.rolePillActive,
+        pressed && styles.rolePillPressed,
+      ]}
     >
       <Ionicons name={icon} size={16} color={active ? colors.white : colors.text.secondary} />
       <Text style={[styles.rolePillText, active && styles.rolePillTextActive]}>{label}</Text>
@@ -272,7 +282,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
     backgroundColor: colors.glass.nested,
-    borderRadius: radii.pill,
+    borderRadius: radii.inner, // segmented-control container = inner panel (16)
     padding: spacing.xs,
   },
   rolePill: {
@@ -282,10 +292,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.sm,
     minHeight: 42,
-    borderRadius: radii.pill,
+    borderRadius: radii.button, // option buttons (16) inside the inner panel
   },
   rolePillActive: {
     backgroundColor: colors.ctaGradient.end,
+  },
+  rolePillPressed: {
+    opacity: 0.9,
   },
   rolePillText: {
     ...typography.captionSemi,
@@ -311,7 +324,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   footerText: { ...typography.caption, color: colors.text.secondary },
-  footerLink: { ...typography.captionSemi, color: '#2D6FB4' },
+  footerLink: { ...typography.captionSemi, color: colors.status.CALLED.fg },
   pendingWrap: {
     flex: 1,
     justifyContent: 'center',
@@ -322,7 +335,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     width: 72,
     height: 72,
-    borderRadius: 36,
+    borderRadius: radii.round, // true circle — token, not literal
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.status.PENDING.bg,

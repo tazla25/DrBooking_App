@@ -6,7 +6,7 @@ import { ErrorBanner, GlassCard, GlassScreen, GlassTextField, PrimaryButton } fr
 import { ApiError, friendlyMessage } from '@/lib/errors';
 import { isValidPassword } from '@/lib/validation';
 import { changePassword, homeRouteFor, useAuthStore } from '@/store/auth';
-import { colors, spacing, typography } from '@/theme';
+import { colors, radii, spacing, typography } from '@/theme';
 
 /**
  * Forced password change — shown when the signed-in account has
@@ -131,7 +131,7 @@ const styles = StyleSheet.create({
   iconCircle: {
     width: 68,
     height: 68,
-    borderRadius: 34,
+    borderRadius: radii.round, // true circle — token, not literal
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.glass.chip,

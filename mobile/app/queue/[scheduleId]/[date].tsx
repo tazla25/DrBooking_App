@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import {
   ErrorBanner,
@@ -10,7 +10,9 @@ import {
   GlassScreen,
   StatusChip,
 } from '@/components';
+import { PulseView, useChangePulse } from '@/components/motion';
 import { formatDateISO } from '@/lib/format';
+import { hapticSuccess } from '@/lib/haptics';
 import { useLiveQueue } from '@/hooks/useLiveQueue';
 import { colors, radii, spacing, typography } from '@/theme';
 import type { AppointmentStatus } from '@/components';
@@ -37,6 +39,25 @@ export default function LiveQueueScreen() {
 
   const queue = useLiveQueue(scheduleId, date, focused);
   const data = queue.data;
+
+  // -- live-change highlights (Phase 10-c motion) --------------------------------
+  // Now-serving token changed → accent pulse on the Now-serving card.
+  const nowPulse = useChangePulse(
+    data?.current ? data.current.queueNumber : null,
+    data?.current != null,
+  );
+  // "Your turn": my.status becomes CALLED → pulse the You card + one light
+  // success haptic (guarded by a ref — exactly once per transition).
+  const myStatus = data?.my ? data.my.status : null;
+  const myPulse = useChangePulse(myStatus, myStatus === 'CALLED');
+  const turnHapticFiredFor = useRef<unknown>(null);
+  useEffect(() => {
+    if (myStatus === 'CALLED' && turnHapticFiredFor.current !== myStatus) {
+      turnHapticFiredFor.current = myStatus;
+      hapticSuccess();
+    }
+    if (myStatus !== 'CALLED') turnHapticFiredFor.current = null;
+  }, [myStatus]);
 
   return (
     <GlassScreen>
@@ -92,6 +113,7 @@ export default function LiveQueueScreen() {
               <View style={styles.gapColumn}>
                 {/* -- now serving -------------------------------------------------- */}
                 <GlassCard padded style={styles.nowCard}>
+                  <PulseView pulse={nowPulse} />
                   <Text style={styles.nowLabel}>Now serving</Text>
                   {data.current ? (
                     <>
@@ -106,6 +128,10 @@ export default function LiveQueueScreen() {
                 {/* -- my row (anonymous-safe) -------------------------------------- */}
                 {data.my ? (
                   <GlassCard padded style={styles.myCard}>
+                    <PulseView
+                      pulse={myPulse}
+                      tint={['rgba(245, 166, 35, 0)', 'rgba(245, 166, 35, 0.18)']}
+                    />
                     <View style={styles.myHead}>
                       <View style={styles.youBadge}>
                         <Text style={styles.youBadgeText}>You</Text>
@@ -115,11 +141,13 @@ export default function LiveQueueScreen() {
                     <View style={styles.myRow}>
                       <Text style={styles.myToken}>#{data.my.queueNumber}</Text>
                       <Text style={styles.myWait}>
-                        {data.my.status === 'CALLED'
-                          ? 'It is your turn — go to the desk'
-                          : data.my.estWaitMin > 0
-                            ? `~${data.my.estWaitMin} min to go`
-                            : 'You are next'}
+                        {data.my.status === 'COMPLETED'
+                          ? 'Visit completed'
+                          : data.my.status === 'CALLED'
+                            ? 'It is your turn — go to the desk'
+                            : data.my.estWaitMin > 0
+                              ? `~${data.my.estWaitMin} min to go`
+                              : 'You are next'}
                       </Text>
                     </View>
                   </GlassCard>
@@ -177,7 +205,9 @@ function UpNextRow({
   return (
     <GlassCard nested style={[styles.upNextRow, isMe && styles.upNextRowMine]}>
       <Text style={styles.upNextToken}>#{item.queueNumber}</Text>
-      <Text style={styles.upNextName}>{item.patientName}</Text>
+      <Text style={styles.upNextName} numberOfLines={1} ellipsizeMode="tail">
+        {item.patientName}
+      </Text>
       <Text style={styles.upNextWait}>{item.estWaitMin > 0 ? `~${item.estWaitMin}m` : 'next'}</Text>
     </GlassCard>
   );
@@ -221,7 +251,7 @@ const styles = StyleSheet.create({
   },
   nowToken: {
     ...typography.display,
-    color: '#2D6FB4',
+    color: colors.status.CALLED.fg,
     fontWeight: '800',
   },
   nowName: { ...typography.caption, color: colors.text.secondary },
@@ -235,7 +265,7 @@ const styles = StyleSheet.create({
   myHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   youBadge: {
     backgroundColor: colors.accent,
-    borderRadius: radii.pill,
+    borderRadius: radii.chip,
     paddingHorizontal: spacing.md,
     paddingVertical: 2,
   },
@@ -277,7 +307,7 @@ const styles = StyleSheet.create({
     borderColor: colors.accent,
     backgroundColor: 'rgba(245, 166, 35, 0.12)',
   },
-  upNextToken: { ...typography.bodySemi, color: '#2D6FB4', width: 44 },
+  upNextToken: { ...typography.bodySemi, color: colors.status.CALLED.fg, width: 44 },
   upNextName: { ...typography.body, color: colors.text.primary, flex: 1 },
   upNextWait: { ...typography.caption, color: colors.text.secondary },
   emptyCard: { alignItems: 'center', gap: spacing.sm, marginVertical: spacing.lg },

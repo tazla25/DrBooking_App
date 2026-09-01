@@ -92,7 +92,7 @@ export default function ProfileScreen() {
           />
         ) : null}
 
-        <Text style={styles.version}>Dr Booking · Phase 8</Text>
+        <Text style={styles.version}>ClinIQ · Phase 10</Text>
       </View>
     </GlassScreen>
   );
@@ -135,6 +135,10 @@ const styles = StyleSheet.create({
   body: {
     flex: 1,
     padding: spacing.base,
+    // B4: floating glass tab bar (~48px + safe inset) + breathing room. 96 is
+    // the ONE documented literal (worklog 10-g) — the largest spacing token
+    // (48) does not reach it.
+    paddingBottom: 96,
     gap: spacing.base,
   },
   card: { gap: spacing.base },
@@ -153,7 +157,7 @@ const styles = StyleSheet.create({
   },
   roleChip: {
     backgroundColor: colors.glass.nested,
-    borderRadius: radii.pill,
+    borderRadius: radii.chip,
     borderWidth: 1,
     borderColor: colors.glass.border,
     paddingHorizontal: spacing.md,

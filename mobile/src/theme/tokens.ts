@@ -1,20 +1,34 @@
+import { Platform } from 'react-native';
+
 /**
  * Design tokens — "glassmorphism pastel blue-purple" (mandatory system from Phase 5 on).
  *
- * LAW: screens render a soft pastel diagonal gradient (sky-blue #BFD9F2 → mint
- * #C7E3EC → lavender #CBC6E8); content sits on translucent white glass cards
- * (white 35–55% alpha, radius 24, 1px rgba(255,255,255,0.6) border, soft navy
- * shadow); primary CTA is a full-radius pill with the light-blue gradient.
+ * LAW (Phase 10 "Glass Reality" revision): the screen is a vivid diagonal
+ * canvas (#4A9FE8 → #5E7BE0 → #7C63D8 + soft white corner glows); content
+ * sits on RAISED translucent white glass (card 66%, nested 34%) so every
+ * layer separates from the canvas. Text contrast is GATED —
+ * scripts/contrast-check.ts fails if any text/glass pair drops below 4.5:1
+ * (report: docs/contrast-report.md).
+ * Radii are LAW: card 22, inner 16, field 14, chip 12, button 16; a full pill
+ * (999) is reserved for TRUE CIRCLES only (avatars, round icon buttons, the
+ * availability toggle). Primary CTA is the light-blue gradient rounded-rect.
  * All UI text is ENGLISH.
  */
 
 export const colors = {
-  /** Screen gradient stops — top → middle → bottom, drawn diagonally. */
+  /** Canvas stops — top → middle → bottom, drawn diagonally (Glass Reality). */
   gradient: {
-    top: '#BFD9F2',
-    mid: '#C7E3EC',
-    bottom: '#CBC6E8',
+    top: '#4A9FE8',
+    mid: '#5E7BE0',
+    bottom: '#7C63D8',
   },
+
+  /**
+   * LEGACY (unused since the Glass Reality pass — the canvas is pure vector
+   * now, there is no wallpaper and no load-failure fallback): the old 5-stop
+   * pastel fallback. #A9CCF0 → #B7DCE9 → #C3D9EA → #C6C1E6 → #BFB9E4.
+   */
+  auroraFallback: ['#A9CCF0', '#B7DCE9', '#C3D9EA', '#C6C1E6', '#BFB9E4'] as const,
 
   /** Light-blue gradient for primary CTAs. */
   ctaGradient: {
@@ -25,23 +39,48 @@ export const colors = {
   /** Text on light glass. */
   text: {
     primary: '#17264A', // dark navy
-    secondary: '#5A6B8C', // gray-blue (also placeholder color)
+    secondary: '#445273', // gray-blue (gate-forced darker than spec's #475679 — the A3 gate needs 4.5:1 at the worst corner)
     onDark: '#FFFFFF',
     inverted: '#FFFFFF', // text over navy pill / blue gradient
   },
 
-  /** Translucent glass surfaces (white alpha per the spec's 35–55% band). */
+  /**
+   * Translucent glass surfaces (white alpha) — GLASS REALITY band, raised so
+   * every layer separates against the vivid canvas: card .66 / cardSoft .52 /
+   * nested .34 / field .58 / chip .46 (borders .60–.65, tab bar .72, header
+   * .55). Still translucent — nested panels stack on cards.
+   */
   glass: {
-    card: 'rgba(255, 255, 255, 0.50)',
-    cardSoft: 'rgba(255, 255, 255, 0.38)',
-    nested: 'rgba(255, 255, 255, 0.32)',
-    field: 'rgba(255, 255, 255, 0.55)',
-    chip: 'rgba(255, 255, 255, 0.45)',
-    border: 'rgba(255, 255, 255, 0.60)',
-    fieldBorder: 'rgba(255, 255, 255, 0.65)',
-    tabBar: 'rgba(255, 255, 255, 0.62)',
-    header: 'rgba(255, 255, 255, 0.45)',
+    card: 'rgba(255, 255, 255, 0.66)',
+    cardSoft: 'rgba(255, 255, 255, 0.52)',
+    nested: 'rgba(255, 255, 255, 0.34)',
+    field: 'rgba(255, 255, 255, 0.58)',
+    chip: 'rgba(255, 255, 255, 0.46)',
+    border: 'rgba(255, 255, 255, 0.65)',
+    fieldBorder: 'rgba(255, 255, 255, 0.60)',
+    tabBar: 'rgba(255, 255, 255, 0.72)',
+    header: 'rgba(255, 255, 255, 0.55)',
   },
+
+  /** Opaque near-white modal panel — content must be fully readable. */
+  modalPanel: 'rgba(255, 255, 255, 0.92)',
+
+  /** Modal backdrop dim (paired with the expo-blur BlurView in GlassModal). */
+  modalBackdrop: 'rgba(22, 33, 58, 0.60)',
+
+  /** Android ripple tint for every tappable list/content surface (Phase 10-c). */
+  ripple: 'rgba(23, 38, 74, 0.18)',
+
+  /**
+   * Interactive selection tint — the chip "active" pair + selected text
+   * (filters, sort chips, analytics windows, audit filters). Reused by every
+   * selected chip so selection always looks identical app-wide.
+   */
+  interactive: {
+    selectedBg: 'rgba(77, 159, 222, 0.28)',
+    selectedBorder: 'rgba(77, 159, 222, 0.55)',
+    selectedFg: '#2D6FB4',
+  } as const,
 
   navy: '#16213A', // dark pill secondary button
   destructive: '#E25555',
@@ -57,14 +96,14 @@ export const colors = {
     PENDING: { fg: '#B27415', bg: 'rgba(245, 166, 35, 0.20)' },
   } as const,
 
-  /** Soft shadow used by glass panels: rgba(23,38,74,0.12) blur 24. */
+  /** Glass panel shadow — navy alpha .22, elevation 10 (Glass Reality). */
   shadow: {
     card: {
       shadowColor: '#17264A',
-      shadowOpacity: 0.12,
+      shadowOpacity: 0.22,
       shadowRadius: 24,
       shadowOffset: { width: 0, height: 8 },
-      elevation: 5,
+      elevation: 10,
     },
     ctaGlow: {
       shadowColor: '#4D9FDE',
@@ -97,26 +136,93 @@ export const spacing = {
   huge: 48,
 } as const;
 
-/** Corner radii. */
+/**
+ * Corner radii — LAW (Phase 10 unification). Buttons are rounded-rects (16),
+ * NOT capsules; `pill`/`round` are for true circles only (avatar, round icon
+ * buttons, the availability toggle).
+ */
 export const radii = {
   pill: 999,
-  card: 24,
+  card: 22,
   inner: 16,
-  field: 15,
+  field: 14,
+  chip: 12,
+  button: 16,
   round: 999,
 } as const;
 
-/** Typography scale — weights map onto the platform system font. */
+/**
+ * Font families — Inter static weights (SIL OFL 1.1, see
+ * assets/fonts/Inter-OFL.txt), loaded via expo-font in app/_layout.tsx while
+ * the splash stays visible (no font flash). If a family fails to load,
+ * React Native silently falls back to the platform system font. Per-screen
+ * fontFamily literals are FORBIDDEN — consume this token (or a typography
+ * token, which all carry fontFamily) instead.
+ */
+export const fontFamily = {
+  regular: 'Inter-Regular',
+  semiBold: 'Inter-SemiBold',
+  bold: 'Inter-Bold',
+  /** One-time passwords / codes — platform monospace by design. */
+  mono: Platform.select({ ios: 'Courier', android: 'monospace' }),
+} as const;
+
+/** Typography scale — Inter weights via the fontFamily token above. */
 export const typography = {
-  display: { fontSize: 34, lineHeight: 41, fontWeight: '700' as const },
-  h1: { fontSize: 28, lineHeight: 34, fontWeight: '700' as const },
-  h2: { fontSize: 20, lineHeight: 26, fontWeight: '600' as const },
-  h3: { fontSize: 17, lineHeight: 23, fontWeight: '600' as const },
-  body: { fontSize: 16, lineHeight: 22, fontWeight: '400' as const },
-  bodySemi: { fontSize: 16, lineHeight: 22, fontWeight: '600' as const },
-  caption: { fontSize: 13, lineHeight: 18, fontWeight: '400' as const },
-  captionSemi: { fontSize: 13, lineHeight: 18, fontWeight: '600' as const },
-  micro: { fontSize: 11, lineHeight: 15, fontWeight: '600' as const },
+  display: {
+    fontFamily: fontFamily.bold,
+    fontSize: 34,
+    lineHeight: 41,
+    fontWeight: '700' as const,
+  },
+  h1: {
+    fontFamily: fontFamily.bold,
+    fontSize: 28,
+    lineHeight: 34,
+    fontWeight: '700' as const,
+  },
+  h2: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 20,
+    lineHeight: 26,
+    fontWeight: '600' as const,
+  },
+  h3: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 17,
+    lineHeight: 23,
+    fontWeight: '600' as const,
+  },
+  body: {
+    fontFamily: fontFamily.regular,
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '400' as const,
+  },
+  bodySemi: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '600' as const,
+  },
+  caption: {
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '400' as const,
+  },
+  captionSemi: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '600' as const,
+  },
+  micro: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '600' as const,
+  },
 } as const;
 
 export type TypographyToken = keyof typeof typography;

@@ -1,8 +1,16 @@
-import { Modal, Pressable, StyleSheet } from 'react-native';
+import { BlurView } from 'expo-blur';
+import {
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
 import type { ReactNode } from 'react';
-import { GlassCard } from './GlassCard';
 import { GlassText } from './GlassText';
-import { spacing } from '@/theme';
+import { colors, radii, spacing } from '@/theme';
 
 interface GlassModalProps {
   visible: boolean;
@@ -14,9 +22,15 @@ interface GlassModalProps {
 }
 
 /**
- * Centered translucent glass sheet (RN Modal). Backdrop is a dim navy veil;
- * content is a GlassCard with optional title. Used for the booking confirm,
- * cancel confirm and feedback sheets.
+ * Centered glass sheet (RN Modal) — Phase 10 legibility pass.
+ *
+ * The backdrop is a REAL blur: expo-blur BlurView (Android uses
+ * experimentalBlurMethod="dimezisBlurView"; iOS uses the native blur) under a
+ * 60% navy dim, so the screen behind a modal is blurred and NOT readable —
+ * the reported "walk-in modal shows the queue text behind it" case. The panel
+ * itself is near-opaque white (92%, radius 22) with the standard glass border
+ * and shadow, so modal text always sits on a readable surface. Used for the
+ * booking confirm, cancel/no-show confirms, walk-in sheet and feedback sheets.
  */
 export function GlassModal({
   visible,
@@ -33,36 +47,66 @@ export function GlassModal({
       statusBarTranslucent
       onRequestClose={dismissable ? onClose : undefined}
     >
-      <Pressable
-        accessibilityLabel="Close dialog"
-        style={styles.backdrop}
-        onPress={() => {
-          if (dismissable && onClose) onClose();
-        }}
-      >
+      <View style={styles.backdropWrap}>
+        {/* Blur first (bottom layer, never intercepts touches). */}
+        <BlurView
+          intensity={50}
+          tint="light"
+          experimentalBlurMethod={
+            Platform.select({ android: 'dimezisBlurView', default: undefined }) ?? undefined
+          }
+          style={styles.blur}
+        />
+        {/* Dim + dismiss pressable above the blur. */}
         <Pressable
-          accessibilityLabel="Dialog"
-          onPress={() => undefined} // swallow taps so the card never dismisses
-          style={styles.cardWrap}
+          accessibilityLabel="Close dialog"
+          style={styles.backdrop}
+          onPress={() => {
+            if (dismissable && onClose) onClose();
+          }}
         >
-          <GlassCard padded style={styles.card}>
-            {title ? (
-              <GlassText variant="h3" style={styles.title}>
-                {title}
-              </GlassText>
-            ) : null}
-            {children}
-          </GlassCard>
+          <Pressable
+            accessibilityLabel="Dialog"
+            onPress={() => undefined} // swallow taps so the panel never dismisses
+            style={styles.cardWrap}
+          >
+            {/* B2 port: keyboard-safe + scrollable sheet — the panel is capped
+                at 85% height, its body scrolls, iOS lifts it above the
+                keyboard (Android relies on window resizing). Blur/dim layers
+                are untouched. */}
+            <KeyboardAvoidingView
+              behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+              style={styles.kav}
+            >
+              <View style={styles.panel}>
+                {title ? (
+                  <GlassText variant="h3" style={styles.title}>
+                    {title}
+                  </GlassText>
+                ) : null}
+                <ScrollView
+                  keyboardShouldPersistTaps="handled"
+                  contentContainerStyle={styles.panelBody}
+                >
+                  {children}
+                </ScrollView>
+              </View>
+            </KeyboardAvoidingView>
+          </Pressable>
         </Pressable>
-      </Pressable>
+      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  backdropWrap: {
+    flex: 1,
+  },
+  blur: StyleSheet.absoluteFill,
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(22, 33, 58, 0.45)',
+    backgroundColor: colors.modalBackdrop,
     justifyContent: 'center',
     alignItems: 'center',
     padding: spacing.xl,
@@ -71,7 +115,20 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 420,
   },
-  card: {
+  kav: {
+    width: '100%',
+  },
+  panel: {
+    backgroundColor: colors.modalPanel,
+    borderRadius: radii.card,
+    borderWidth: 1,
+    borderColor: colors.glass.border,
+    ...colors.shadow.card,
+    padding: spacing.lg,
+    gap: spacing.base,
+    maxHeight: '85%',
+  },
+  panelBody: {
     gap: spacing.base,
   },
   title: {

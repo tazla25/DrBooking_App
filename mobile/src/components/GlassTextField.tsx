@@ -1,11 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import {
+  Pressable,
   StyleSheet,
   Text,
   TextInput,
   TextInputProps,
-  TouchableOpacity,
   View,
   type ViewStyle,
 } from 'react-native';
@@ -52,18 +52,19 @@ export function GlassTextField({
           style={[styles.input, !icon && styles.inputNoIcon, style]}
         />
         {secure ? (
-          <TouchableOpacity
+          <Pressable
             accessibilityLabel={hidden ? 'Show password' : 'Hide password'}
             accessibilityRole="button"
             onPress={() => setHidden((v) => !v)}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+            style={({ pressed }) => pressed && styles.eyePressed}
           >
             <Ionicons
               name={hidden ? 'eye-outline' : 'eye-off-outline'}
               size={20}
               color={colors.text.secondary}
             />
-          </TouchableOpacity>
+          </Pressable>
         ) : null}
       </View>
       {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -106,6 +107,9 @@ const styles = StyleSheet.create({
   },
   inputNoIcon: {
     marginLeft: 0,
+  },
+  eyePressed: {
+    opacity: 0.5,
   },
   error: {
     ...typography.caption,

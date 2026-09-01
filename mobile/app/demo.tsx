@@ -1,5 +1,6 @@
 import { useRouter } from 'expo-router';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   Avatar,
   ErrorBanner,
@@ -7,6 +8,7 @@ import {
   GlassCard,
   GlassCircleButton,
   GlassHeader,
+  GlassModal,
   GlassScreen,
   GlassText,
   GlassTextField,
@@ -14,6 +16,8 @@ import {
   PrimaryButton,
   StatusChip,
 } from '@/components';
+import { AnimatedChip, AnimatedEntrance, PulseView, useChangePulse } from '@/components/motion';
+import { hapticSelection, hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { colors, radii, spacing, typography } from '@/theme';
 
 /**
@@ -22,6 +26,10 @@ import { colors, radii, spacing, typography } from '@/theme';
  */
 export default function DemoScreen() {
   const router = useRouter();
+  const [modalVisible, setModalVisible] = useState(false);
+  const [demoChipActive, setDemoChipActive] = useState(false);
+  const [demoPulseTick, setDemoPulseTick] = useState(0);
+  const demoPulse = useChangePulse(demoPulseTick, true);
 
   if (!__DEV__) {
     // Production safety net: bounce out if this route is somehow hit.
@@ -53,12 +61,89 @@ export default function DemoScreen() {
           </GlassText>
         </DemoSection>
 
+        <DemoSection title="Interaction feel">
+          <GlassCard padded>
+            <GlassText variant="caption" color={colors.text.secondary}>
+              Every tappable list/content surface: Android ripple (rgba(23,38,74,0.18), clipped to
+              the radius) + pressed dim 0.9. Buttons: pressed dim 0.8 or press-scale 0.98. Chips:
+              120ms background/border crossfade. Haptics: selection / success / warning.
+            </GlassText>
+          </GlassCard>
+          <AnimatedEntrance index={0}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => undefined}
+              android_ripple={{ color: colors.ripple, borderless: false, foreground: true }}
+              style={({ pressed }) => [styles.rippleCard, pressed && styles.rippleCardPressed]}
+            >
+              <GlassCard padded style={styles.rippleInnerCard}>
+                <GlassText variant="h3">Ripple + pressed card</GlassText>
+                <GlassText variant="caption" color={colors.text.secondary}>
+                  Tap me — ripple clips to the 22 radius, the card dims to 0.9.
+                </GlassText>
+              </GlassCard>
+            </Pressable>
+          </AnimatedEntrance>
+          <AnimatedEntrance index={1}>
+            <GlassCard padded>
+              <GlassText variant="h3">Entrance · 220ms · staggered</GlassText>
+              <GlassText variant="caption" color={colors.text.secondary}>
+                This card faded in 40ms after the one above (12px rise). Reduce Motion skips it.
+              </GlassText>
+            </GlassCard>
+          </AnimatedEntrance>
+          <View style={styles.row}>
+            <AnimatedChip
+              active={demoChipActive}
+              bg={[colors.glass.chip, colors.interactive.selectedBg]}
+              border={[colors.glass.border, colors.interactive.selectedBorder]}
+              onPress={() => {
+                hapticSelection();
+                setDemoChipActive((v) => !v);
+              }}
+              style={styles.demoChip}
+            >
+              <Text style={[styles.demoChipText, demoChipActive && styles.demoChipTextActive]}>
+                Crossfade chip
+              </Text>
+            </AnimatedChip>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setDemoPulseTick((t) => t + 1)}
+              style={({ pressed }) => [styles.pulseBtn, pressed && styles.pulseBtnPressed]}
+            >
+              <Text style={styles.pulseBtnText}>Fire pulse</Text>
+            </Pressable>
+          </View>
+          <GlassCard padded style={styles.pulseCard}>
+            <PulseView pulse={demoPulse} />
+            <GlassText variant="h3">Live-change pulse</GlassText>
+            <GlassText variant="caption" color={colors.text.secondary}>
+              Tap the Fire pulse button — a 600ms accent tint flashes (the Now-serving / CALLED
+              treatment).
+            </GlassText>
+          </GlassCard>
+          <View style={styles.row}>
+            <GlassButton
+              label="Haptic · selection"
+              onPress={() => hapticSelection()}
+              style={styles.hapticBtn}
+            />
+            <GlassButton label="Haptic · success" onPress={() => hapticSuccess()} tone="accent" />
+          </View>
+          <GlassButton
+            label="Haptic · warning"
+            tone="destructive"
+            onPress={() => hapticWarning()}
+          />
+        </DemoSection>
+
         <DemoSection title="Glass cards">
           <GlassCard padded>
-            <GlassText variant="captionSemi">CARD · radius 24 · white 50%</GlassText>
+            <GlassText variant="captionSemi">CARD · radius 22 · white 34%</GlassText>
             <GlassCard nested style={styles.innerPanel}>
               <GlassText variant="caption" color={colors.text.secondary}>
-                Nested panel · radius 16 · white 32%
+                Nested panel · radius 16 · white 18% — stacks translucent, never milky
               </GlassText>
             </GlassCard>
           </GlassCard>
@@ -137,11 +222,26 @@ export default function DemoScreen() {
           <ErrorBanner message={null} />
         </DemoSection>
 
-        <DemoSection title="Screen gradient">
+        <DemoSection title="Modal (blurred backdrop)">
           <GlassCard padded>
             <GlassText variant="caption" color={colors.text.secondary}>
-              This screen shows the full pastel diagonal gradient: #BFD9F2 → #C7E3EC → #CBC6E8.
-              Cards, fields and chips are translucent white glass over it.
+              GlassModal blurs + dims whatever sits behind it (Android dimezisBlurView, iOS native
+              blur) so background text is never readable through a sheet.
+            </GlassText>
+            <GlassButton
+              label="Open sample modal"
+              icon="alert-circle-outline"
+              onPress={() => setModalVisible(true)}
+            />
+          </GlassCard>
+        </DemoSection>
+
+        <DemoSection title="Screen background">
+          <GlassCard padded>
+            <GlassText variant="caption" color={colors.text.secondary}>
+              This screen shows the vivid diagonal canvas #4A9FE8 → #5E7BE0 → #7C63D8 with soft
+              white corner glows (pure vector — no wallpaper). Cards, fields and chips are raised
+              translucent white glass over it.
             </GlassText>
             <View style={[styles.swatchRow]}>
               {[
@@ -163,6 +263,18 @@ export default function DemoScreen() {
           </GlassCard>
         </DemoSection>
       </ScrollView>
+
+      <GlassModal
+        visible={modalVisible}
+        title="Sample glass modal"
+        onClose={() => setModalVisible(false)}
+      >
+        <Text style={styles.modalBody}>
+          The queue text behind this sheet is blurred and dimmed — this is the exact treatment the
+          Add-walk-in sheet uses over the staff Today screen.
+        </Text>
+        <PrimaryButton label="Close" onPress={() => setModalVisible(false)} />
+      </GlassModal>
     </GlassScreen>
   );
 }
@@ -178,6 +290,27 @@ function DemoSection({ title, children }: { title: string; children: React.React
 
 const styles = StyleSheet.create({
   scroll: { padding: spacing.base, paddingBottom: spacing.huge, gap: spacing.lg },
+  rippleCard: {
+    borderRadius: radii.card,
+    overflow: 'hidden', // ripple + card content clip to the rounded shape
+  },
+  rippleCardPressed: { opacity: 0.9 },
+  rippleInnerCard: { gap: spacing.xs },
+  demoChip: { paddingHorizontal: spacing.base, paddingVertical: spacing.sm },
+  demoChipText: { ...typography.caption, color: colors.text.secondary },
+  demoChipTextActive: { ...typography.captionSemi, color: colors.interactive.selectedFg },
+  pulseBtn: {
+    borderRadius: radii.button,
+    borderWidth: 1,
+    borderColor: colors.glass.border,
+    backgroundColor: colors.glass.chip,
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.sm,
+  },
+  pulseBtnPressed: { opacity: 0.8 },
+  pulseBtnText: { ...typography.captionSemi, color: colors.text.primary },
+  pulseCard: { gap: spacing.xs, overflow: 'hidden' },
+  hapticBtn: { flex: 1 },
   section: { gap: spacing.md },
   sectionTitle: {
     ...typography.captionSemi,
@@ -204,4 +337,5 @@ const styles = StyleSheet.create({
     borderColor: colors.glass.border,
   },
   swatchLabel: { ...typography.micro, color: colors.text.secondary },
+  modalBody: { ...typography.body, color: colors.text.secondary, textAlign: 'center' },
 });

@@ -6,7 +6,7 @@ import { ApiError, friendlyMessage } from '@/lib/errors';
 import { registerPushToken } from '@/lib/push';
 import { normalizePhoneInput } from '@/lib/validation';
 import { homeRouteFor, loginWith } from '@/store/auth';
-import { colors, spacing, typography } from '@/theme';
+import { colors, radii, spacing, typography } from '@/theme';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -65,7 +65,7 @@ export default function LoginScreen() {
             <View style={styles.logoCircle}>
               <Text style={styles.logoText}>Dr</Text>
             </View>
-            <Text style={styles.title}>Dr Booking</Text>
+            <Text style={styles.title}>ClinIQ</Text>
             <Text style={styles.subtitle}>Book clinic visits without the wait</Text>
           </View>
 
@@ -127,7 +127,7 @@ const styles = StyleSheet.create({
   logoCircle: {
     width: 76,
     height: 76,
-    borderRadius: 38,
+    borderRadius: radii.round, // true circle — token, not literal
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.glass.chip,
@@ -135,6 +135,8 @@ const styles = StyleSheet.create({
     borderColor: colors.glass.border,
     marginBottom: spacing.base,
   },
+  // Deliberate override (Phase 10-c exception): the wordmark glyph is tuned
+  // to the 76px circle — 30px stays, NOT the display token.
   logoText: { ...typography.display, color: colors.text.primary, fontSize: 30 },
   title: { ...typography.display, color: colors.text.primary },
   subtitle: { ...typography.body, color: colors.text.secondary, marginTop: spacing.xs },
@@ -146,5 +148,5 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   footerText: { ...typography.caption, color: colors.text.secondary },
-  footerLink: { ...typography.captionSemi, color: '#2D6FB4' },
+  footerLink: { ...typography.captionSemi, color: colors.status.CALLED.fg },
 });

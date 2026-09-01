@@ -1,4 +1,5 @@
 import { Stack } from 'expo-router';
+import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
@@ -8,12 +9,21 @@ import { useAuthStore } from '@/store/auth';
 import { colors } from '@/theme';
 
 // Keep the native splash visible until the session is hydrated from
-// expo-secure-store (the "splash gate").
+// expo-secure-store AND the Inter fonts are loaded (the "splash gate" +
+// keepVisibleOnMount font pattern — no font flash).
 void SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 export default function RootLayout() {
   const status = useAuthStore((s) => s.status);
   const hydrate = useAuthStore((s) => s.hydrate);
+
+  // Inter (SIL OFL 1.1 — assets/fonts/Inter-OFL.txt). A load error counts as
+  // "done": the app proceeds on the system font fallback, never a blank gate.
+  const [fontsLoaded, fontError] = useFonts({
+    'Inter-Regular': require('../assets/fonts/Inter-Regular.ttf'),
+    'Inter-SemiBold': require('../assets/fonts/Inter-SemiBold.ttf'),
+    'Inter-Bold': require('../assets/fonts/Inter-Bold.ttf'),
+  });
 
   // Push setup (B1): foreground presentation + Android channel — idempotent,
   // so calling it in the render body is safe on every re-render.
@@ -26,14 +36,14 @@ export default function RootLayout() {
   }, [hydrate]);
 
   useEffect(() => {
-    if (status !== 'hydrating') {
+    if (status !== 'hydrating' && (fontsLoaded || fontError)) {
       void SplashScreen.hideAsync().catch(() => undefined);
     }
-  }, [status]);
+  }, [fontError, fontsLoaded, status]);
 
   return (
     <>
-      <StatusBar style="dark" />
+      <StatusBar style="light" />
       <Stack
         screenOptions={{
           headerShown: false,
