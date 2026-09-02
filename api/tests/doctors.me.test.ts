@@ -260,3 +260,225 @@ describe('PATCH /api/doctors/me', () => {
     expect(detail.changedKeys).toEqual(['registrationNumber', 'avatarUrl']);
   });
 });
+
+describe('PATCH /api/doctors/me — null clears EVERY editable field (fix1)', () => {
+  let doctor: Awaited<ReturnType<typeof createDoctorFixture>>;
+
+  /** All-six-values seed (the blank-field clear tests start from here). */
+  const FULL = {
+    specialization: 'Cardiology',
+    fee: 500,
+    yearsExperience: 12,
+    bio: 'Heart doctor',
+    registrationNumber: 'BMDC-C-10001',
+    avatarUrl: PNG_AVATAR,
+  };
+
+  async function seedFull() {
+    await db.doctorProfile.update({ where: { id: doctor.doctorId }, data: FULL });
+  }
+
+  async function storedProfile() {
+    return db.doctorProfile.findUnique({ where: { id: doctor.doctorId } });
+  }
+
+  async function lastAuditDetail(): Promise<string | null | undefined> {
+    const audit = await db.auditLog.findFirst({
+      where: { action: 'DOCTOR_PROFILE_UPDATED', target: `doctor:${doctor.doctorId}` },
+      orderBy: { createdAt: 'desc' },
+    });
+    return audit?.detail;
+  }
+
+  function patch(body: unknown, token?: string) {
+    return patchMe(patchRequest(`${API}/api/doctors/me`, body, token));
+  }
+
+  beforeAll(async () => {
+    await resetDb();
+    doctor = await createDoctorFixture({ phone: '9844000031', name: 'Dr Nuller' });
+  });
+
+  it('full-null payload clears ALL six fields (response view + stored row)', async () => {
+    await seedFull();
+    const body = await readResponse(
+      await patch(
+        {
+          specialization: null,
+          fee: null,
+          yearsExperience: null,
+          bio: null,
+          registrationNumber: null,
+          avatarUrl: null,
+        },
+        doctor.token,
+      ),
+    );
+    expect(body.status).toBe(200);
+    const data = body.data as {
+      specialization: string | null;
+      fee: number | null;
+      yearsExperience: number | null;
+      bio?: string;
+      registrationNumber: string | null;
+      avatarUrl: string | null;
+    };
+    expect(data.specialization).toBeNull();
+    expect(data.fee).toBeNull();
+    expect(data.yearsExperience).toBeNull();
+    expect(data.bio).toBeUndefined(); // bio is only-when-present in the view
+    expect(data.registrationNumber).toBeNull();
+    expect(data.avatarUrl).toBeNull();
+
+    const stored = await storedProfile();
+    expect(stored?.specialization).toBeNull();
+    expect(stored?.fee).toBeNull();
+    expect(stored?.yearsExperience).toBeNull();
+    expect(stored?.bio).toBeNull();
+    expect(stored?.registrationNumber).toBeNull();
+    expect(stored?.avatarUrl).toBeNull();
+
+    const detail = JSON.parse((await lastAuditDetail()) ?? '{}') as { changedKeys?: string[] };
+    expect(detail.changedKeys).toEqual([
+      'specialization',
+      'fee',
+      'yearsExperience',
+      'bio',
+      'registrationNumber',
+      'avatarUrl',
+    ]);
+  });
+
+  it.each([
+    ['specialization', 'Cardiology'],
+    ['fee', 500],
+    ['yearsExperience', 12],
+    ['bio', 'Heart doctor'],
+  ] as const)(
+    'clearing %s INDIVIDUALLY nulls only that field',
+    async (field, seededValue) => {
+      await seedFull();
+      const body = await readResponse(await patch({ [field]: null }, doctor.token));
+      expect(body.status).toBe(200);
+
+      const stored = await storedProfile();
+      // Only the patched field is null; every other field keeps its value.
+      expect((stored as Record<string, unknown> | null)?.[field]).toBeNull();
+      const otherFields = Object.keys(FULL).filter((k) => k !== field);
+      for (const key of otherFields) {
+        expect((stored as Record<string, unknown> | null)?.[key]).toBe(
+          (FULL as Record<string, unknown>)[key],
+        );
+      }
+      expect(seededValue).not.toBeNull(); // sanity: the seed really had a value
+
+      const detail = JSON.parse((await lastAuditDetail()) ?? '{}') as { changedKeys?: string[] };
+      expect(detail.changedKeys).toEqual([field]);
+    },
+  );
+
+  it('NO-OP guard: full-null PATCH on an all-null profile audits changedKeys: []', async () => {
+    await seedFull();
+    // First PATCH clears everything…
+    const first = await readResponse(
+      await patch(
+        {
+          specialization: null,
+          fee: null,
+          yearsExperience: null,
+          bio: null,
+          registrationNumber: null,
+          avatarUrl: null,
+        },
+        doctor.token,
+      ),
+    );
+    expect(first.status).toBe(200);
+
+    // …so this second, identical full-null PATCH is a complete no-op.
+    const second = await readResponse(
+      await patch(
+        {
+          specialization: null,
+          fee: null,
+          yearsExperience: null,
+          bio: null,
+          registrationNumber: null,
+          avatarUrl: null,
+        },
+        doctor.token,
+      ),
+    );
+    expect(second.status).toBe(200);
+
+    const audit = await db.auditLog.findFirst({
+      where: { action: 'DOCTOR_PROFILE_UPDATED', target: `doctor:${doctor.doctorId}` },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(audit).not.toBeNull();
+    expect(audit?.actorId).toBe(doctor.userId);
+    const detail = JSON.parse(audit!.detail ?? '{}') as { changedKeys?: string[] };
+    expect(detail.changedKeys).toEqual([]);
+  });
+
+  it('REGRESSION: setting real values still works after a null clear', async () => {
+    const body = await readResponse(
+      await patch(
+        {
+          specialization: 'Cardiology',
+          fee: 750,
+          yearsExperience: 20,
+          bio: 'Senior cardiologist',
+          registrationNumber: 'BMDC-C-20002',
+          avatarUrl: PNG_AVATAR,
+        },
+        doctor.token,
+      ),
+    );
+    expect(body.status).toBe(200);
+    const data = body.data as {
+      specialization: string | null;
+      fee: number | null;
+      yearsExperience: number | null;
+      bio?: string;
+      registrationNumber: string | null;
+      avatarUrl: string | null;
+    };
+    expect(data.specialization).toBe('Cardiology');
+    expect(data.fee).toBe(750);
+    expect(data.yearsExperience).toBe(20);
+    expect(data.bio).toBe('Senior cardiologist');
+    expect(data.registrationNumber).toBe('BMDC-C-20002');
+    expect(data.avatarUrl).toBe(PNG_AVATAR);
+
+    const stored = await storedProfile();
+    expect(stored?.specialization).toBe('Cardiology');
+    expect(stored?.fee).toBe(750);
+    expect(stored?.bio).toBe('Senior cardiologist');
+  });
+
+  it('REGRESSION: empty-string specialization/bio still clear to null (and audit as changes)', async () => {
+    const body = await readResponse(
+      await patch({ specialization: '', bio: '' }, doctor.token),
+    );
+    expect(body.status).toBe(200);
+
+    const stored = await storedProfile();
+    expect(stored?.specialization).toBeNull();
+    expect(stored?.bio).toBeNull();
+
+    const detail = JSON.parse((await lastAuditDetail()) ?? '{}') as { changedKeys?: string[] };
+    expect(detail.changedKeys).toEqual(['specialization', 'bio']);
+  });
+
+  it('SPURIOUS-EDGE guards: "" over stored NULL and null over stored NULL are no-ops', async () => {
+    // Profile is all-null at this point (previous test cleared it).
+    const body = await readResponse(await patch({ specialization: '', bio: null }, doctor.token));
+    expect(body.status).toBe(200);
+    const stored = await storedProfile();
+    expect(stored?.specialization).toBeNull();
+    expect(stored?.bio).toBeNull();
+    const detail = JSON.parse((await lastAuditDetail()) ?? '{}') as { changedKeys?: string[] };
+    expect(detail.changedKeys).toEqual([]);
+  });
+});
