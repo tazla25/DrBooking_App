@@ -598,3 +598,16 @@ Work Log:
 
 Stage Summary:
 - Phase 11 delivery fully unblocked: branch pushed, PR open, all gates green, fresh EAS APK byte-verified. Remaining owner steps: run MIGRATION.md (db push → merge → Vercel → EAS) — the agent never touches production or merges.
+
+---
+Task ID: 11-n (mobilefix1)
+Agent: Super Z (coding agent)
+Task: Phase 11 mobilefix1 — profile scroll fix (BUG-1) + upcoming-pending confirm surface (BUG-2) + one fresh APK
+
+Work Log:
+- BUG-1 (verified by auditor, not re-diagnosed): GlassScreen content is not scrollable by design; the Phase 11 doctor edit card overflowed the fold and buried Sign Out. Fixed ALL THREE profile screens ((staff), (tabs), (admin)): body View → bounded ScrollView (style flex:1, contentContainerStyle = old body minus flex:1, showsVerticalScrollIndicator false, runway kept/set to the documented tab-screen literal 96 — every tab screen's convention; the runbook's spacing.xxxl (40) is the STACK-screen convention and would leave the last card behind the floating glass tab bar).
+- BUG-2: PENDING bookings for FUTURE dates were invisible to staff (the pending card renders only for the SELECTED date). useTodayQueue now exposes upcomingPending (PENDING rows across today+1…+7 — the book-screen DATE_STRIP_DAYS horizon — EXCLUDING the selected date) + rescan(). Scan reuses the EXISTING fetchTodayQueue(date) (L2 — no new endpoints), bounded parallel (7 requests), dedupes by appointment id, failed dates keep last-good rows silently, never runs on the 15s poll tick. Triggers: focus, date change, pull-to-refresh, after every confirm/reject settles.
+- Today console: new "Awaiting confirmation — upcoming (N)" GlassCard directly below the selected-date pending card (zero rows → renders nothing); rows reuse PendingRow with a forDate meta line ("For {date}" + calendar icon); Confirm/Reject reuse the SAME handlers (single-tap confirm + reject modal); toast copy unchanged. FlatList testID added (testing affordance).
+- Tests: +2 suites, +14 tests (4 profile-scroll assertions incl. runway/scrollbar props; 6 hook tests — horizon rows, selected-date exclusion, dedupe, failed-date last-good, post-confirm rescan, poll-tick-no-rescan + date-change rescan; 4 component tests — both cards render, zero-row silence, upcoming Confirm → same handler + toast, pull-to-refresh rescan). Existing useTodayQueue counts made scan-aware (callsFor(date) helper; the stale-data test's colliding date moved outside the horizon).
+- GATES at the code commit: mobile typecheck 0 / lint 0 / jest 23 suites 296 tests (baseline 21/282 — only additions) / prettier clean / contrast GATE PASSED (24 pairs, min 4.72:1) / audit-assets GATE PASSED. api jest 30 suites / 248 tests EXACT baseline + `git diff origin/main -- api/` EMPTY (L1). No DB, no Vercel, no Supabase, no api/ changes (L4/L5 kept).
+- Branch v2/phase-11-mobilefix1 from origin/main 9c22ed3 (S-M4 verified exact). PR → PLAIN merge (no squash). Post-merge: ONE fresh EAS Android build from the MERGE COMMIT with the same profile as 472a61bd (preview) + full artifact forensics (see the PR and the delivery report).
