@@ -81,13 +81,13 @@ describe('GET /api/queue/today', () => {
     };
     expect(data.doctor.id).toBe(doctorA.doctorId);
     expect(data.doctor.fullName).toBe('Dr Alpha');
-    expect(data.counts).toEqual({ confirmed: 3, called: 0, completed: 0, cancelled: 0, noShow: 0 });
+    expect(data.counts).toEqual({ pending: 0, confirmed: 3, called: 0, completed: 0, cancelled: 0, noShow: 0 });
     expect(data.appointments.map((a) => a.queueNumber)).toEqual([1, 2, 3]);
     expect(data.appointments[0].patientPhone).toBe('+919811110001'); // full, unmasked
     expect(data.appointments[0].patientName).toBe('Patient 1');
   });
 
-  it('computes estWaitMin = (CONFIRMED|CALLED ahead in same schedule) × avgMinutesPerPatient', async () => {
+  it('computes estWaitMin = (ahead-statuses in same schedule) × avgMinutesPerPatient — PENDING counts ahead (Phase 11 B2)', async () => {
     // q1, q2, q3 CONFIRMED → est 0, 10, 20 (avg = 10 min).
     const res = await queueTodayRoute(getRequest(`${API}/api/queue/today`, doctorA.token));
     const body = await readResponse(res);
@@ -104,6 +104,35 @@ describe('GET /api/queue/today', () => {
     // restore for later tests
     await db.appointment.update({ where: { id: appointments[0].id }, data: { status: 'CONFIRMED' } });
     await db.appointment.update({ where: { id: appointments[1].id }, data: { status: 'CONFIRMED' } });
+
+    // Phase 11: a PENDING row is returned by /queue/today with status PENDING,
+    // counts as ahead for later serials, and increments counts.pending.
+    const scheduleA = await db.schedule.findFirst({ where: { doctorId: doctorA.doctorId } });
+    await createAppointmentFixture(scheduleA!.id, doctorA.doctorId, {
+      queueNumber: 4,
+      status: 'PENDING',
+      patientName: 'Pending Patient',
+      patientPhone: '9811110004',
+    });
+    await createAppointmentFixture(scheduleA!.id, doctorA.doctorId, {
+      queueNumber: 5,
+      patientName: 'Later Patient',
+      patientPhone: '9811110005',
+    });
+    const res3 = await queueTodayRoute(getRequest(`${API}/api/queue/today`, doctorA.token));
+    const body3 = await readResponse(res3);
+    const data3 = body3.data as { counts: Record<string, number>; appointments: QueueAppointment[] };
+    expect(data3.counts).toEqual({ pending: 1, confirmed: 4, called: 0, completed: 0, cancelled: 0, noShow: 0 });
+    // q4 PENDING: est = 3 CONFIRMED ahead (q1..q3) × 10 = 30.
+    expect(data3.appointments.find((a) => a.queueNumber === 4)?.estWaitMin).toBe(30);
+    // q5 CONFIRMED after the PENDING row: 4 ahead-statuses ahead × 10 = 40.
+    expect(data3.appointments.find((a) => a.queueNumber === 5)?.estWaitMin).toBe(40);
+    // The PENDING row itself carries status PENDING (client partitions).
+    expect(data3.appointments.find((a) => a.queueNumber === 4)?.status).toBe('PENDING');
+    // clean up the two extras so later length assertions stay honest
+    await db.appointment.deleteMany({
+      where: { scheduleId: scheduleA!.id, queueNumber: { in: [4, 5] } },
+    });
   });
 
   it('scopes a COMPOUNDER to the delegated doctor and IGNORES client-sent ?doctorId=', async () => {

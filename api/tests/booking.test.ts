@@ -52,7 +52,7 @@ describe('POST /api/appointments (patient booking, #8)', () => {
     return bookAppointment(postRequest(`${API}/api/appointments`, body, token));
   }
 
-  it('books for the patient: 201, identity from session, fee from doctor, ONLINE/CONFIRMED', async () => {
+  it('books for the patient: 201, identity from session, fee from doctor, ONLINE → PENDING (Phase 11 B1)', async () => {
     // A walk-in is already in the queue ahead (queue number 1).
     await createAppointmentFixture(schedule.id, doctor.doctorId, {
       queueNumber: 1,
@@ -71,7 +71,9 @@ describe('POST /api/appointments (patient booking, #8)', () => {
     expect(data.appointment.patientName).toBe('Session Patient');
     expect(data.appointment.patientPhone).toBe('+919820000010');
     expect(data.appointment.source).toBe('ONLINE');
-    expect(data.appointment.status).toBe('CONFIRMED');
+    // Phase 11 B1: ONLINE bookings land PENDING — staff confirm manually;
+    // the serial is still allocated here (queueNumber 2) and never changes.
+    expect(data.appointment.status).toBe('PENDING');
     expect(data.appointment.fee).toBe(400); // doctor's fee at booking time
     expect(data.appointment.queueNumber).toBe(2);
     expect(data.position).toBe(2);
@@ -125,8 +127,9 @@ describe('POST /api/appointments (patient booking, #8)', () => {
     expect(anonymous.status).toBe(401);
   });
 
-  it('rejects a duplicate ACTIVE booking with 409 ALREADY_BOOKED', async () => {
-    // patient (9820000010) already has an active booking on this schedule+date.
+  it('rejects a duplicate ACTIVE booking with 409 ALREADY_BOOKED — a PENDING booking blocks too (Phase 11 B2)', async () => {
+    // patient (9820000010) already has a PENDING booking on this schedule+date
+    // (created by the test above) — PENDING is in the duplicate-active guard.
     const body = await readResponse(await book({ scheduleId: schedule.id, date: today }, patient.token));
     expect(body.status).toBe(409);
     expect(body.error?.code).toBe('ALREADY_BOOKED');
@@ -134,7 +137,7 @@ describe('POST /api/appointments (patient booking, #8)', () => {
 
   it('after cancel, re-booking the same slot succeeds with a fresh queue number', async () => {
     const mine = await db.appointment.findFirst({
-      where: { patientId: patient.userId, scheduleId: schedule.id, status: 'CONFIRMED' },
+      where: { patientId: patient.userId, scheduleId: schedule.id, status: 'PENDING' },
     });
     expect(mine).not.toBeNull();
     await db.appointment.update({ where: { id: mine!.id }, data: { status: 'CANCELLED' } });
@@ -143,7 +146,7 @@ describe('POST /api/appointments (patient booking, #8)', () => {
     expect(body.status).toBe(201);
     const appt = (body.data as { appointment: BookedAppointment }).appointment;
     expect(appt.queueNumber).toBeGreaterThan(mine!.queueNumber); // cancelled number not reused
-    expect(appt.status).toBe('CONFIRMED');
+    expect(appt.status).toBe('PENDING'); // re-booked ONLINE → PENDING again
   });
 
   it('409 CAPACITY_FULL when the effective window is exhausted', async () => {

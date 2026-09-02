@@ -1,11 +1,14 @@
 import type { Appointment, Schedule } from '@prisma/client';
+import { ACTIVE_STATUSES } from '@/lib/booking';
 
 /**
  * Queue view helpers for the doctor/compounder panel (Phase 2, #14–15).
  *
  * estWaitMin (fixes the v1 miscount — implement EXACTLY this):
  *   (number of appointments with the SAME scheduleId+date whose status is
- *    CONFIRMED or CALLED and whose queueNumber is LOWER than this one's)
+ *    ahead-of-you (PENDING|CONFIRMED|CALLED — Phase 11 B2 sweep: consumers
+ *    that counted CONFIRMED|CALLED now also count PENDING, matching
+ *    ACTIVE_STATUSES) and whose queueNumber is LOWER than this one's)
  *   × schedule.avgMinutesPerPatient
  *
  * The input list MUST contain every appointment of each (scheduleId, date)
@@ -32,15 +35,17 @@ export interface StaffAppointmentView {
 
 /** Map raw rows (ordered by queueNumber) to the staff queue view. */
 export function toStaffQueueView(appointments: AppointmentWithSchedule[]): StaffAppointmentView[] {
-  // Per (scheduleId) prefix count of CONFIRMED|CALLED — appointments passed in
-  // are all for the same date, so scheduleId alone identifies the group.
+  // Per (scheduleId) prefix count of ahead-statuses (PENDING|CONFIRMED|CALLED
+  // via ACTIVE_STATUSES — Phase 11 B2). Appointments passed in are all for the
+  // same date, so scheduleId alone identifies the group.
+  const aheadSet: ReadonlySet<string> = new Set<string>(ACTIVE_STATUSES);
   const seenAhead = new Map<string, number>();
 
   return appointments.map((appt) => {
     const ahead = seenAhead.get(appt.scheduleId) ?? 0;
     const estWaitMin = ahead * appt.schedule.avgMinutesPerPatient;
 
-    if (appt.status === 'CONFIRMED' || appt.status === 'CALLED') {
+    if (aheadSet.has(appt.status)) {
       seenAhead.set(appt.scheduleId, ahead + 1);
     }
 
@@ -60,17 +65,33 @@ export function toStaffQueueView(appointments: AppointmentWithSchedule[]): Staff
   });
 }
 
-/** Status tally for the queue header — { confirmed, called, completed, cancelled, noShow }. */
+/**
+ * Status tally for the queue header — { pending, confirmed, called,
+ * completed, cancelled, noShow }. `pending` is the Phase 11 B2 manual-
+ * confirmation inbox count (PENDING rows surface as their own section at the
+ * top of the staff Today console).
+ */
 export function countStatuses(appointments: Appointment[]): {
+  pending: number;
   confirmed: number;
   called: number;
   completed: number;
   cancelled: number;
   noShow: number;
 } {
-  const counts = { confirmed: 0, called: 0, completed: 0, cancelled: 0, noShow: 0 };
+  const counts = {
+    pending: 0,
+    confirmed: 0,
+    called: 0,
+    completed: 0,
+    cancelled: 0,
+    noShow: 0,
+  };
   for (const appt of appointments) {
     switch (appt.status) {
+      case 'PENDING':
+        counts.pending += 1;
+        break;
       case 'CONFIRMED':
         counts.confirmed += 1;
         break;

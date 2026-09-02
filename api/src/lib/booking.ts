@@ -11,11 +11,15 @@ import { conflict, notFound } from '@/lib/errors';
  * The transaction body performs, in order:
  *   1. CLOSED-override check for (scheduleId, date)      → 409 SCHEDULE_CLOSED
  *   2. duplicate-active guard (INSIDE the transaction — v1 bug #4)
- *      - patientId path  : same patientId + schedule + date, CONFIRMED|CALLED
- *      - walk-in path    : same phone   + schedule + date, CONFIRMED|CALLED
+ *      - patientId path  : same patientId + schedule + date,
+ *                           PENDING|CONFIRMED|CALLED (a pending booking
+ *                           blocks a second one — Phase 11 B2)
+ *      - walk-in path    : same phone   + schedule + date,
+ *                           PENDING|CONFIRMED|CALLED
  *   3. queueNumber = max(scheduleId+date, ALL statuses) + 1  (numbers are
  *      never reused, even after cancellations)
- *   4. insert
+ *   4. insert — status per source (Phase 11 B1):
+ *      ONLINE → PENDING (staff confirm manually), WALK_IN → CONFIRMED
  *
  * Retries on Prisma P2002 (queue-number unique race) / P2034 (write conflict)
  * live HERE — `runBookingTransaction` re-runs the whole body up to 3 attempts.
@@ -57,19 +61,21 @@ export async function bookInQueue(
   }
 
   // 2. Duplicate-active guard INSIDE the transaction (v1 bug #4 fix).
+  // Phase 11 B2: PENDING joins the active set — a pending booking must block
+  // a second booking until it is confirmed, cancelled, or staff-rejected.
   const duplicateWhere: Prisma.AppointmentWhereInput =
     input.patientId !== null
       ? {
           scheduleId: input.scheduleId,
           date: input.date,
           patientId: input.patientId,
-          status: { in: ['CONFIRMED', 'CALLED'] },
+          status: { in: ['PENDING', 'CONFIRMED', 'CALLED'] },
         }
       : {
           scheduleId: input.scheduleId,
           date: input.date,
           patientPhone: input.patientPhone,
-          status: { in: ['CONFIRMED', 'CALLED'] },
+          status: { in: ['PENDING', 'CONFIRMED', 'CALLED'] },
         };
   const duplicate = await tx.appointment.findFirst({
     where: duplicateWhere,
@@ -101,7 +107,9 @@ export async function bookInQueue(
   });
   const queueNumber = (last?.queueNumber ?? 0) + 1;
 
-  // 4. Insert.
+  // 4. Insert — status per source (Phase 11 B1): ONLINE bookings land
+  // PENDING (staff confirm them manually — the serial is STILL allocated
+  // here and NEVER changes); walk-ins are desk-created → CONFIRMED as before.
   return tx.appointment.create({
     data: {
       scheduleId: input.scheduleId,
@@ -111,7 +119,7 @@ export async function bookInQueue(
       patientPhone: input.patientPhone,
       date: input.date,
       queueNumber,
-      status: 'CONFIRMED',
+      status: input.source === 'ONLINE' ? 'PENDING' : 'CONFIRMED',
       source: input.source,
       fee: input.fee !== undefined ? input.fee : schedule.doctor.fee,
       notes: input.notes ?? null,
@@ -200,10 +208,16 @@ export function effectiveWindow(
 }
 
 /** Appointments that count toward capacity (everything except cancellations). */
-export const CAPACITY_TAKEN_STATUSES = ['CONFIRMED', 'CALLED', 'COMPLETED', 'NO_SHOW'] as const;
+export const CAPACITY_TAKEN_STATUSES = ['PENDING', 'CONFIRMED', 'CALLED', 'COMPLETED', 'NO_SHOW'] as const;
 
-/** Appointments that occupy the live queue ahead of a new booking. */
-export const ACTIVE_STATUSES = ['CONFIRMED', 'CALLED'] as const;
+/**
+ * Appointments that occupy the live queue ahead of a new booking / appear in
+ * the patient's upcoming list. Phase 11 B2: PENDING joins the set — a pending
+ * booking holds its serial, so it counts toward the estimated wait and MUST
+ * stay visible in "upcoming" (the v1 bug #4 lesson: the read-side status set
+ * must mirror exactly what booking writes).
+ */
+export const ACTIVE_STATUSES = ['PENDING', 'CONFIRMED', 'CALLED'] as const;
 
 export interface QueueCapacity {
   capacity: number;
@@ -233,6 +247,8 @@ export async function getQueueCapacity(
   const capacity = Math.max(0, Math.floor((endMin - startMin) / avg));
 
   // Sequential awaits: this may run inside an interactive transaction.
+  // `taken` counts every non-CANCELLED row (PENDING included — a pending
+  // booking consumes capacity); activeCount now includes PENDING too.
   const taken = await client.appointment.count({
     where: { scheduleId: schedule.id, date, status: { not: 'CANCELLED' } },
   });

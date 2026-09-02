@@ -1,4 +1,5 @@
 import { GET as exportRoute } from '@/app/api/export/appointments/route';
+import { db } from '@/lib/db';
 import { addDaysISO, istTodayISO } from '@/lib/time';
 import {
   getRequest,
@@ -251,5 +252,31 @@ describe('GET /api/export/appointments (#31)', () => {
 
     const malformed = await readResponse(await exportCsv(doctor.token, '?from=2026-13-40'));
     expect(malformed.status).toBe(422);
+  });
+
+  it('PENDING rows export with status PENDING in the status column (Phase 11 B2)', async () => {
+    // Runs LAST so the earlier row-count assertions are untouched.
+    await createAppointmentFixture(schedule.id, doctor.doctorId, {
+      date: today,
+      queueNumber: 6,
+      status: 'PENDING',
+      source: 'ONLINE',
+      fee: 500,
+      patientName: 'Pending Export',
+      patientPhone: '+919834000109',
+    });
+
+    const res = await readCsv(await exportCsv(doctor.token, `?from=${today}&to=${today}`));
+    expect(res.status).toBe(200);
+    // queueNumber 6 sorts last among today's rows — its status cell is PENDING.
+    const rows = res.lines.slice(1).map((line) => line.split(','));
+    const pendingRow = rows.find((r) => Number(r[1]) === 6);
+    expect(pendingRow).toBeDefined();
+    expect(pendingRow![6]).toBe('PENDING'); // status column renders the raw value
+
+    // Cleanup (keeps the file's fixtures honest if it ever grows).
+    await db.appointment.deleteMany({
+      where: { scheduleId: schedule.id, date: today, queueNumber: 6 },
+    });
   });
 });

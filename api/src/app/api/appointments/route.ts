@@ -23,12 +23,16 @@ export const dynamic = 'force-dynamic';
  * ONE transaction (with the shared booking core, retried on queue-number
  * races): CLOSED → 409 SCHEDULE_CLOSED → capacityLeft ≤ 0 → 409 CAPACITY_FULL
  * → duplicate active booking → 409 ALREADY_BOOKED → insert (queueNumber =
- * max+1, fee = doctor's fee at booking time, source ONLINE, status CONFIRMED)
+ * max+1, fee = doctor's fee at booking time, source ONLINE, status PENDING —
+ * Phase 11 B1: staff confirm manually; the serial is final at booking)
  * + DoctorProfile.appointmentCount increment in the SAME transaction.
  *
  * Push trigger (a), fire-and-forget AFTER the transaction commits: the patient
- * gets "Booking confirmed, token #N". A push failure can never roll the
- * booking back (src/lib/push.ts swallows everything).
+ * gets "Booking received" with their token — deliberately NOT "confirmed"
+ * (Phase 11: the appointment is PENDING until staff confirm it; the separate
+ * APPOINTMENT_CONFIRMED push fires at confirmation). data.type stays
+ * BOOKING_CONFIRMED (the frozen client deep-link contract). A push failure can
+ * never roll the booking back (src/lib/push.ts swallows everything).
  */
 export const POST = handle(async (request: Request): Promise<Response> => {
   const user = await requireAuth(request, ['PATIENT']);
@@ -121,9 +125,12 @@ export const POST = handle(async (request: Request): Promise<Response> => {
   });
 
   // Push trigger (a) — AFTER commit, fire-and-forget, never blocks the reply.
+  // Phase 11 B2: copy reflects PENDING (received, awaiting clinic
+  // confirmation); data.type stays BOOKING_CONFIRMED — the frozen mobile
+  // deep-link contract routes it to the appointments tab.
   notifyUser(user.id, {
-    title: 'Booking confirmed',
-    body: `Booking confirmed, token #${appointment.queueNumber}`,
+    title: 'Booking received',
+    body: `Booking received — token #${appointment.queueNumber}, awaiting clinic confirmation`,
     data: {
       type: 'BOOKING_CONFIRMED',
       appointmentId: appointment.id,

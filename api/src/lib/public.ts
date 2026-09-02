@@ -26,6 +26,8 @@ export function maskPatientName(name: string): string {
  * Public doctor fields for listings and profiles (contract #6).
  * `id` is the DoctorProfile id — NEVER the backing User id.
  * `bio` is included only when present.
+ * Phase 11 (A3): registrationNumber + avatarUrl are additive public fields
+ * (both nullable — absent for doctors who never set them).
  */
 export function publicDoctorView(
   doctor: Pick<
@@ -36,6 +38,8 @@ export function publicDoctorView(
     | 'fee'
     | 'yearsExperience'
     | 'bio'
+    | 'registrationNumber'
+    | 'avatarUrl'
     | 'avgRating'
     | 'reviewCount'
     | 'isAvailableNow'
@@ -47,6 +51,8 @@ export function publicDoctorView(
   fee: number | null;
   yearsExperience: number | null;
   bio?: string;
+  registrationNumber: string | null;
+  avatarUrl: string | null;
   avgRating: number;
   reviewCount: number;
   isAvailableNow: boolean;
@@ -58,6 +64,8 @@ export function publicDoctorView(
     fee: number | null;
     yearsExperience: number | null;
     bio?: string;
+    registrationNumber: string | null;
+    avatarUrl: string | null;
     avgRating: number;
     reviewCount: number;
     isAvailableNow: boolean;
@@ -67,6 +75,8 @@ export function publicDoctorView(
     specialization: doctor.specialization,
     fee: doctor.fee,
     yearsExperience: doctor.yearsExperience,
+    registrationNumber: doctor.registrationNumber,
+    avatarUrl: doctor.avatarUrl,
     avgRating: doctor.avgRating,
     reviewCount: doctor.reviewCount,
     isAvailableNow: doctor.isAvailableNow,

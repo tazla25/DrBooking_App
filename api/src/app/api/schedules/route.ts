@@ -39,8 +39,12 @@ export const GET = handle(async (request: Request): Promise<Response> => {
       doctor: { select: { id: true, fullName: true } },
       overrides: { where: { date: today } },
       _count: {
+        // Phase 11 B2 sweep: todayQueueCount counted CONFIRMED|CALLED → now
+        // also counts PENDING (a pending booking occupies the schedule).
         select: {
-          appointments: { where: { date: today, status: { in: ['CONFIRMED', 'CALLED'] } } },
+          appointments: {
+            where: { date: today, status: { in: ['PENDING', 'CONFIRMED', 'CALLED'] } },
+          },
         },
       },
     },

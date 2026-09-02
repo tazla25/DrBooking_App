@@ -119,6 +119,13 @@ model DoctorProfile {
   fee              Int? // INR
   yearsExperience  Int?
   bio              String?
+  // Phase 11 (A1): medical council registration number (e.g. BMDC-A-12345),
+  // 3-40 chars, shown to patients for trust. Plain String (cross-DB law).
+  registrationNumber String?
+  // Phase 11 (A1): doctor avatar as a data URL — exactly
+  // 'data:image/jpeg;base64,…' or 'data:image/png;base64,…', hard cap 300k
+  // chars (mobile compresses to ≤512x512 JPEG q0.7 before upload).
+  avatarUrl        String?
   avgRating        Float    @default(0)
   reviewCount      Int      @default(0)
   appointmentCount Int      @default(0)
@@ -190,7 +197,7 @@ model Appointment {
   patientPhone String
   date         String // YYYY-MM-DD (IST)
   queueNumber  Int
-  status       String   @default("CONFIRMED") // CONFIRMED | CALLED | COMPLETED | CANCELLED | NO_SHOW
+  status       String   @default("CONFIRMED") // PENDING | CONFIRMED | CALLED | COMPLETED | CANCELLED | NO_SHOW
   source       String   @default("ONLINE") // ONLINE | WALK_IN
   fee          Int? // INR at booking time
   notes        String?
