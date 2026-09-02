@@ -4,7 +4,8 @@
  *
  *  - GET  /api/queue/today?date=YYYY-MM-DD            (DOCTOR/COMPOUNDER, scoped)
  *  - POST /api/queue/next                              (DOCTOR/COMPOUNDER)
- *  - POST /api/appointments/:id/status                 (staff status machine)
+ *  - POST /api/appointments/:id/status                 (staff status machine,
+ *        incl. the Phase 11 confirm/reject actions on PENDING rows)
  *  - POST /api/appointments/walk-in                    (staff books a patient)
  *  - GET  /api/schedules  ·  POST /api/schedules       (includes INACTIVE)
  *  - PUT  /api/schedules/:id  ·  DELETE /api/schedules/:id (soft delete)
@@ -13,13 +14,15 @@
  *  - GET/POST /api/patients/:phone/notes               (phone = path param → encoded)
  *  - PATCH /api/availability                           (optimistic toggle target)
  *  - GET/POST /api/compounders · DELETE /api/compounders/:id  (DOCTOR only)
+ *  - GET/PATCH /api/doctors/me                         (Phase 11 doctor self-edit)
  *
  * SCOPING LAW: the server ignores client-sent doctorId for DOCTOR/COMPOUNDER —
  * these wrappers NEVER send one. SUPER_ADMIN is not part of the mobile staff
  * console (Phase 8); the role guard in app/(staff)/_layout.tsx is UX defense.
  *
- * api/ is FROZEN for mobile phases: if a screen seems to need a shape change,
- * raise it as an "API GAP" in the PR instead of editing api/.
+ * api/ is FROZEN for mobile phases except the Phase 11 scope (doctor identity
+ * + manual confirmation): if a screen seems to need a shape change outside
+ * that scope, raise it as an "API GAP" in the PR instead of editing api/.
  */
 
 import { apiRequest } from './api';
@@ -30,13 +33,16 @@ import type { OverrideType, SafeUser } from './types';
 // Types
 // ---------------------------------------------------------------------------
 
-export type SettableStatus = 'CALLED' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW';
+export type SettableStatus = 'CONFIRMED' | 'CALLED' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW';
 
 /**
- * Legal staff-driven transitions (mirror of the api's ALLOWED_TRANSITIONS —
- * CONFIRMED is never settable; terminal statuses are immutable).
+ * Legal staff-driven transitions (mirror of the api's ALLOWED_TRANSITIONS).
+ * Phase 11 B2: PENDING → CONFIRMED (the manual confirm) and PENDING →
+ * CANCELLED (the staff reject). CONFIRMED never goes back to PENDING
+ * (one-way confirmation); terminal statuses are immutable.
  */
 export const STATUS_TRANSITIONS: Record<string, readonly SettableStatus[]> = {
+  PENDING: ['CONFIRMED', 'CANCELLED'],
   CONFIRMED: ['CALLED', 'CANCELLED', 'NO_SHOW'],
   CALLED: ['COMPLETED'],
   COMPLETED: [],
@@ -63,6 +69,7 @@ export interface StaffQueueAppointment {
 }
 
 export interface TodayQueueCounts {
+  pending: number;
   confirmed: number;
   called: number;
   completed: number;
@@ -252,6 +259,87 @@ export function setAppointmentStatus(
   return apiRequest<{ appointment: AppointmentRecord }>(`/api/appointments/${id}/status`, {
     method: 'POST',
     body: { status },
+  });
+}
+
+// -- Phase 11 B3: manual confirmation actions -----------------------------------
+
+/**
+ * POST /api/appointments/:id/status { status: 'CONFIRMED' } — the manual
+ * confirm action on a PENDING booking (PENDING → CONFIRMED). The server
+ * pushes APPOINTMENT_CONFIRMED to the patient and audits the decision.
+ */
+export function confirmAppointment(id: string): Promise<{ appointment: AppointmentRecord }> {
+  return setAppointmentStatus(id, 'CONFIRMED');
+}
+
+/**
+ * The staff REJECT action — PENDING → CANCELLED via the existing status
+ * route, followed by an optional note persisted as a PATIENT NOTE (the only
+ * existing notes store, keyed by phone — works for walk-ins too). The note is
+ * best-effort AFTER the cancellation: a note failure never rolls the
+ * rejection back (surfaced as a non-blocking warning message returned by the
+ * hook, while the cancellation itself stands).
+ */
+export async function rejectAppointment(
+  id: string,
+  patientPhone: string,
+  note?: string,
+): Promise<{ appointment: AppointmentRecord; noteWarning: string | null }> {
+  const result = await setAppointmentStatus(id, 'CANCELLED');
+  const trimmed = note?.trim();
+  if (trimmed) {
+    try {
+      await addPatientNote(patientPhone, trimmed, true);
+    } catch {
+      return {
+        appointment: result.appointment,
+        noteWarning: 'Rejection saved, but the note could not be added to the patient record.',
+      };
+    }
+  }
+  return { appointment: result.appointment, noteWarning: null };
+}
+
+// -- Phase 11 A4: doctor self-service profile ------------------------------------
+
+/** PATCH /api/doctors/me response — the publicDoctorView shape. */
+export interface DoctorProfileView {
+  id: string;
+  fullName: string;
+  specialization: string | null;
+  fee: number | null;
+  yearsExperience: number | null;
+  bio?: string;
+  registrationNumber: string | null;
+  avatarUrl: string | null;
+  avgRating: number;
+  reviewCount: number;
+  isAvailableNow: boolean;
+}
+
+/**
+ * Editable fields for the profile form (fullName is NOT editable, A2). Null
+ * clears the stored value server-side; an absent key leaves it untouched.
+ */
+export interface DoctorProfilePatchBody {
+  specialization?: string | null;
+  fee?: number | null;
+  yearsExperience?: number | null;
+  bio?: string | null;
+  registrationNumber?: string | null;
+  avatarUrl?: string | null;
+}
+
+/**
+ * PATCH /api/doctors/me — doctor-only self-service profile update. Blank
+ * optional identity fields are sent as null (clear) instead of empty
+ * strings; a field absent from the body is left untouched server-side.
+ */
+export function updateDoctorProfile(body: DoctorProfilePatchBody): Promise<DoctorProfileView> {
+  return apiRequest<DoctorProfileView>('/api/doctors/me', {
+    method: 'PATCH',
+    body,
   });
 }
 

@@ -7,8 +7,9 @@ import { useAuthStore } from '@/store/auth';
  * Push deep-link taps (Phase 8, B3).
  *
  * The frozen server payloads (api/src/lib/push.ts) are string-only:
- *   BOOKING_CONFIRMED / APPOINTMENT_CANCELLED / QUEUE_POSITION
- * All three target PATIENTS, so every one of them routes to the patient
+ *   BOOKING_CONFIRMED / APPOINTMENT_CANCELLED / QUEUE_POSITION /
+ *   APPOINTMENT_CONFIRMED (Phase 11 B2 — the manual confirmation)
+ * All of them target PATIENTS, so every one of them routes to the patient
  * appointments tab. The live-queue route needs scheduleId + date which the
  * payload does NOT carry — by design we do NOT guess those.
  */
@@ -24,6 +25,7 @@ export function deepLinkRouteFor(type: unknown): PushDeepLinkRoute | null {
   if (
     type === 'BOOKING_CONFIRMED' ||
     type === 'APPOINTMENT_CANCELLED' ||
+    type === 'APPOINTMENT_CONFIRMED' ||
     type === 'QUEUE_POSITION'
   ) {
     return '/(tabs)/appointments';

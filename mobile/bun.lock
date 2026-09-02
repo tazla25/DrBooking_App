@@ -15,6 +15,8 @@
         "expo-file-system": "~57.0.6",
         "expo-font": "~57.0.2",
         "expo-haptics": "~57.0.2",
+        "expo-image-manipulator": "~57.0.15",
+        "expo-image-picker": "~57.0.15",
         "expo-linear-gradient": "~57.0.1",
         "expo-linking": "~57.0.8",
         "expo-notifications": "~57.0.15",
@@ -962,6 +964,12 @@
     "expo-glass-effect": ["expo-glass-effect@57.0.1", "", { "peerDependencies": { "expo": "*", "react": "*", "react-native": "*" } }, "sha512-m/n8maxqNcHk6ZDhuqXBfD5Kt1Iz3M8xykVgdB0iSCIXvF70IqWXmQhX8Psswhrp8eZ+3r0mAD0Jh/2gFA3QaA=="],
 
     "expo-haptics": ["expo-haptics@57.0.2", "", { "peerDependencies": { "expo": "*" } }, "sha512-vPths6zTxxaGaemC7D1GKbw1iOnOAAL5oAcCFVSgVNWnuLCBefL1LkhRBaJsepiMXRh2y3vwPiXkPaf6d16blA=="],
+
+    "expo-image-loader": ["expo-image-loader@57.0.1", "", { "peerDependencies": { "expo": "*" } }, "sha512-uhrZKLT/cTl2mXyR28kPpVkS5O+PK9N1QA/07IFM4f5T4g0lTW1JHT3NEWwEEsGFldPmVX4j7LwUVVZxE+woug=="],
+
+    "expo-image-manipulator": ["expo-image-manipulator@57.0.15", "", { "dependencies": { "expo-image-loader": "~57.0.1" }, "peerDependencies": { "expo": "*" } }, "sha512-53yoKoM5XGtPrJGV1ozSPWP4xe+sTNSQm2+gWR5H6kGztT4hVfCRnxd/k2GBEWbaqQ5ZWZtPTSd4VWVd2C77AA=="],
+
+    "expo-image-picker": ["expo-image-picker@57.0.15", "", { "dependencies": { "expo-image-loader": "~57.0.1" }, "peerDependencies": { "expo": "*" } }, "sha512-sTPIlN6v7/PQqOpRp6VFKTpvfFHE5xqkg+Pi5Ccem80HMNPrPtcT/CU9dZRBgM3MntEZ9GOrArDb5eRY5/HIoA=="],
 
     "expo-keep-awake": ["expo-keep-awake@57.0.1", "", { "peerDependencies": { "expo": "*", "react": "*" } }, "sha512-28lkFImeXTS+bhAjuCFV7w7tW5bXg27BJVrxv+nC/nyYa86qEa0oFeHwqol6ha5k4pdVDQgBF09GM4A1k76Ssg=="],
 

@@ -89,10 +89,15 @@ function DoctorProfile({ doctor }: { doctor: DoctorDetail }) {
       {/* -- Profile card ------------------------------------------------ */}
       <GlassCard padded style={styles.card}>
         <View style={styles.identityRow}>
-          <Avatar name={doctor.fullName} size={72} />
+          <Avatar name={doctor.fullName} size={72} uri={doctor.avatarUrl} />
           <View style={styles.identity}>
             <Text style={styles.name}>{doctor.fullName}</Text>
             <Text style={styles.spec}>{doctor.specialization ?? 'General practice'}</Text>
+            {doctor.registrationNumber ? (
+              <Text style={styles.regNo} numberOfLines={1}>
+                Reg. {doctor.registrationNumber}
+              </Text>
+            ) : null}
             <View style={styles.availabilityRow}>
               <View
                 style={[
@@ -267,6 +272,8 @@ const styles = StyleSheet.create({
   identity: { flex: 1, gap: 2 },
   name: { ...typography.h2, color: colors.text.primary },
   spec: { ...typography.body, color: colors.text.secondary },
+  // Registration number (Phase 11 A5) — rendered ONLY when set, never "N/A".
+  regNo: { ...typography.captionSemi, color: colors.status.CONFIRMED.fg },
   availabilityRow: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -20,7 +20,12 @@ import type { ScheduleView } from './types';
 // Types
 // ---------------------------------------------------------------------------
 
-export type AppointmentStatus = 'CONFIRMED' | 'CALLED' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW';
+/**
+ * PENDING joins the machine in Phase 11 B2 — ONLINE bookings land PENDING
+ * until staff confirm them (walk-ins go straight to CONFIRMED).
+ */
+export type AppointmentStatus =
+  'PENDING' | 'CONFIRMED' | 'CALLED' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW';
 
 export type AppointmentSource = 'ONLINE' | 'WALK_IN';
 
@@ -138,6 +143,12 @@ export interface LiveQueueUpNext {
   estWaitMin: number;
 }
 
+/** Phase 11 B2: a masked PENDING row (awaiting clinic confirmation). */
+export interface LiveQueuePending {
+  queueNumber: number;
+  patientName: string; // masked
+}
+
 export interface LiveQueueMy {
   id: string;
   queueNumber: number;
@@ -146,7 +157,8 @@ export interface LiveQueueMy {
 }
 
 /** GET /api/queue/:scheduleId/:date — `my` is null unless the bearer token
- *  belongs to a PATIENT booked in THIS queue (anonymous-safe by design). */
+ *  belongs to a PATIENT booked in THIS queue (anonymous-safe by design).
+ *  Phase 11 B2: `pending` carries the masked PENDING rows + counts.pending. */
 export interface LiveQueueResponse {
   date: string;
   schedule: {
@@ -162,10 +174,12 @@ export interface LiveQueueResponse {
   };
   current: LiveQueueCurrent | null;
   upNext: LiveQueueUpNext[];
+  pending: LiveQueuePending[];
   counts: {
     completed: number;
     called: number;
     waiting: number;
+    pending: number;
   };
   my: LiveQueueMy | null;
 }

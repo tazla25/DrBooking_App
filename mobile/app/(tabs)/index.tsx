@@ -314,7 +314,7 @@ function DoctorCard({ doctor, onPress }: { doctor: DoctorSummary; onPress: () =>
     >
       <GlassCard padded style={styles.card}>
         <View style={styles.cardTop}>
-          <Avatar name={doctor.fullName} size={52} />
+          <Avatar name={doctor.fullName} size={52} uri={doctor.avatarUrl} />
           <View style={styles.cardInfo}>
             <Text style={styles.name} numberOfLines={1}>
               {doctor.fullName}
@@ -322,6 +322,11 @@ function DoctorCard({ doctor, onPress }: { doctor: DoctorSummary; onPress: () =>
             <Text style={styles.spec} numberOfLines={1}>
               {doctor.specialization ?? 'General practice'}
             </Text>
+            {doctor.registrationNumber ? (
+              <Text style={styles.regNo} numberOfLines={1}>
+                Reg. {doctor.registrationNumber}
+              </Text>
+            ) : null}
             <View style={styles.availabilityRow}>
               <View
                 style={[
@@ -427,6 +432,8 @@ const styles = StyleSheet.create({
   cardInfo: { flex: 1, gap: 2 },
   name: { ...typography.h3, color: colors.text.primary },
   spec: { ...typography.caption, color: colors.text.secondary },
+  // Registration number (Phase 11 A5) — rendered ONLY when set, never "N/A".
+  regNo: { ...typography.micro, color: colors.status.CONFIRMED.fg, letterSpacing: 0.3 },
   availabilityRow: {
     flexDirection: 'row',
     alignItems: 'center',

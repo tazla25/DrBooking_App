@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
-import { fetchTodayQueue } from '@/lib/staff';
+import { fetchTodayQueue, confirmAppointment, rejectAppointment } from '@/lib/staff';
+import { ApiError } from '@/lib/errors';
 import { useTodayQueue, TODAY_QUEUE_POLL_INTERVAL_MS } from '../useTodayQueue';
 
 /**
@@ -7,18 +8,26 @@ import { useTodayQueue, TODAY_QUEUE_POLL_INTERVAL_MS } from '../useTodayQueue';
  * fetch on focus, refetch when the DATE param changes, tick every 15s, stop
  * on unfocus AND unmount, never overlap in-flight requests, keep last-good
  * data on poll errors, recover on the next tick.
+ *
+ * Phase 11 B3: the PENDING section — derived pending rows, single-tap
+ * confirm with OPTIMISTIC flip + full ROLLBACK on failure, and the
+ * non-optimistic reject (CANCELLED via the status route + patient note).
  */
 
 jest.mock('@/lib/staff', () => ({
   fetchTodayQueue: jest.fn(),
+  confirmAppointment: jest.fn(),
+  rejectAppointment: jest.fn(),
 }));
 
 const mockedFetch = fetchTodayQueue as jest.Mock;
+const mockedConfirm = confirmAppointment as jest.Mock;
+const mockedReject = rejectAppointment as jest.Mock;
 
 const QUEUE = (date: string) => ({
   date,
   doctor: { id: 'doc1', fullName: 'Ananya Rao' },
-  counts: { confirmed: 2, called: 1, completed: 0, cancelled: 0, noShow: 0 },
+  counts: { pending: 1, confirmed: 2, called: 1, completed: 0, cancelled: 0, noShow: 0 },
   appointments: [
     {
       id: 'apt1',
@@ -32,6 +41,19 @@ const QUEUE = (date: string) => ({
       fee: 300,
       estWaitMin: 20,
       createdAt: '2026-08-30T03:00:00.000Z',
+    },
+    {
+      id: 'apt2',
+      queueNumber: 4,
+      status: 'PENDING',
+      source: 'ONLINE',
+      patientName: 'Pending Patient',
+      patientPhone: '+919812345678',
+      patientId: 'u2',
+      notes: null,
+      fee: 300,
+      estWaitMin: 30,
+      createdAt: '2026-08-30T05:30:00.000Z',
     },
   ],
 });
@@ -52,6 +74,8 @@ async function tick() {
 beforeEach(() => {
   jest.clearAllMocks();
   mockedFetch.mockReset();
+  mockedConfirm.mockReset();
+  mockedReject.mockReset();
   mockedFetch.mockResolvedValue(QUEUE('2026-08-30'));
 });
 
@@ -161,6 +185,139 @@ describe('useTodayQueue — stops', () => {
     });
     await tick();
     expect(mockedFetch).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('useTodayQueue — PENDING section + confirm/reject (Phase 11 B3)', () => {
+  test('pending rows are derived from the queue data (status PENDING only)', async () => {
+    const { result } = await renderHook(() => useTodayQueue('2026-08-30', true));
+    await act(async () => {});
+
+    expect(result.current.pending).toHaveLength(1);
+    expect(result.current.pending[0].id).toBe('apt2');
+    expect(result.current.pending[0].status).toBe('PENDING');
+    // The confirmed queue (screen side) filters these out — the raw rows stay.
+    expect(result.current.data?.appointments).toHaveLength(2);
+  });
+
+  test('confirmPending flips the row OPTIMISTICALLY, calls the API, refreshes on success', async () => {
+    const { result } = await renderHook(() => useTodayQueue('2026-08-30', true));
+    await act(async () => {});
+    expect(mockedFetch).toHaveBeenCalledTimes(1);
+
+    // The post-confirm refresh HANGS until resolved, so the OPTIMISTIC state
+    // is observable before the server truth lands (mockImplementationOnce is
+    // queued AFTER the initial fetch has been consumed).
+    let resolveRefresh: (value: unknown) => void = () => undefined;
+    mockedFetch.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveRefresh = resolve;
+        }),
+    );
+
+    mockedConfirm.mockResolvedValueOnce({ appointment: { id: 'apt2', status: 'CONFIRMED' } });
+    let error: string | null = 'unset';
+    await act(async () => {
+      error = await result.current.confirmPending('apt2');
+    });
+
+    expect(error).toBeNull();
+    expect(mockedConfirm).toHaveBeenCalledWith('apt2');
+
+    // The optimistic flip: pending drained, counts moved — immediately, BEFORE
+    // the refresh resolves (it is still hanging).
+    expect(result.current.pending).toHaveLength(0);
+    expect(result.current.data?.counts.pending).toBe(0);
+    expect(result.current.data?.counts.confirmed).toBe(3);
+    const flipped = result.current.data?.appointments.find((a) => a.id === 'apt2');
+    expect(flipped?.status).toBe('CONFIRMED');
+
+    // Success triggered the background refresh — now land the server truth.
+    await waitFor(() => expect(mockedFetch).toHaveBeenCalledTimes(2));
+    const serverTruth = QUEUE('2026-08-30');
+    serverTruth.appointments[1].status = 'CONFIRMED';
+    serverTruth.counts = { ...serverTruth.counts, pending: 0, confirmed: 3 };
+    await act(async () => {
+      resolveRefresh(serverTruth);
+    });
+    expect(result.current.data?.counts.confirmed).toBe(3);
+    expect(result.current.data?.appointments.find((a) => a.id === 'apt2')?.status).toBe(
+      'CONFIRMED',
+    );
+  });
+
+  test('confirmPending ROLLS BACK the optimistic flip on failure and returns the error', async () => {
+    const { result } = await renderHook(() => useTodayQueue('2026-08-30', true));
+    await act(async () => {});
+
+    mockedConfirm.mockRejectedValueOnce(
+      new ApiError(409, 'INVALID_TRANSITION', 'Stale list — refetching'),
+    );
+    let error: string | null = null;
+    await act(async () => {
+      error = await result.current.confirmPending('apt2');
+    });
+
+    expect(error).toBe('Stale list — refetching');
+    // Rolled back exactly: the row is pending again, counts restored.
+    expect(result.current.pending).toHaveLength(1);
+    expect(result.current.data?.counts.pending).toBe(1);
+    expect(result.current.data?.counts.confirmed).toBe(2);
+    expect(result.current.data?.appointments.find((a) => a.id === 'apt2')?.status).toBe('PENDING');
+    // No refresh on failure (the rollback IS the state).
+    expect(mockedFetch).toHaveBeenCalledTimes(1);
+  });
+
+  test('rejectPending cancels via the status route with the patient phone + note, then refreshes', async () => {
+    const { result } = await renderHook(() => useTodayQueue('2026-08-30', true));
+    await act(async () => {});
+
+    mockedReject.mockResolvedValueOnce({ appointment: { id: 'apt2' }, noteWarning: null });
+    let outcome!: { error: string | null; noteWarning: string | null };
+    await act(async () => {
+      outcome = await result.current.rejectPending('apt2', ' Double-booked slot ');
+    });
+
+    expect(outcome?.error).toBeNull();
+    expect(outcome?.noteWarning).toBeNull();
+    // Phone resolved from the row + the note trimmed (patient-note contract).
+    expect(mockedReject).toHaveBeenCalledWith('apt2', '+919812345678', 'Double-booked slot');
+    await waitFor(() => expect(mockedFetch).toHaveBeenCalledTimes(2));
+  });
+
+  test('rejectPending failure surfaces the error and NEVER mutates the rows (not optimistic)', async () => {
+    const { result } = await renderHook(() => useTodayQueue('2026-08-30', true));
+    await act(async () => {});
+
+    mockedReject.mockRejectedValueOnce(new ApiError(0, 'NETWORK_ERROR', 'Cannot reach the server'));
+    let outcome!: { error: string | null; noteWarning: string | null };
+    await act(async () => {
+      outcome = await result.current.rejectPending('apt2');
+    });
+
+    expect(outcome?.error).toBe('Cannot reach the server. Check your connection and try again.');
+    expect(result.current.pending).toHaveLength(1); // untouched
+    expect(mockedFetch).toHaveBeenCalledTimes(1); // no refresh on failure
+  });
+
+  test('rejectPending surfaces the note warning without failing the rejection', async () => {
+    const { result } = await renderHook(() => useTodayQueue('2026-08-30', true));
+    await act(async () => {});
+
+    mockedReject.mockResolvedValueOnce({
+      appointment: { id: 'apt2' },
+      noteWarning: 'Rejection saved, but the note could not be added to the patient record.',
+    });
+    let outcome!: { error: string | null; noteWarning: string | null };
+    await act(async () => {
+      outcome = await result.current.rejectPending('apt2', 'reason');
+    });
+
+    expect(outcome?.error).toBeNull();
+    expect(outcome?.noteWarning).toBe(
+      'Rejection saved, but the note could not be added to the patient record.',
+    );
   });
 });
 

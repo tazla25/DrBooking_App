@@ -5,6 +5,9 @@ import {
   validateOverrideForm,
   validateScheduleForm,
   validateWalkInForm,
+  validateAvatarDataUrl,
+  validateProfileEditForm,
+  type ProfileEditFormValues,
 } from '../validation';
 
 /**
@@ -282,5 +285,108 @@ describe('validateNoteForm (noteCreateSchema mirror)', () => {
     expect(validateNoteForm('   ')).toBe('Write the note first');
     expect(validateNoteForm('')).toBe('Write the note first');
     expect(validateNoteForm('x'.repeat(2001))).toBe('Note is too long (max 2000 characters)');
+  });
+});
+
+// -- Phase 11 A4: doctor profile edit mirrors ---------------------------------------
+
+describe('validateAvatarDataUrl (api avatar rule mirror, Phase 11 A4)', () => {
+  test('accepts valid jpeg/png data URLs', () => {
+    expect(validateAvatarDataUrl('data:image/jpeg;base64,/9j/4AAQ')).toBeNull();
+    expect(validateAvatarDataUrl('data:image/png;base64,iVBORw0KGgo=')).toBeNull();
+  });
+
+  test('rejects wrong mime / not a data URL', () => {
+    expect(validateAvatarDataUrl('data:image/webp;base64,AAAA')).toMatch(/JPEG or PNG/);
+    expect(validateAvatarDataUrl('https://cdn.example/photo.png')).toMatch(/JPEG or PNG/);
+    expect(validateAvatarDataUrl('data:image/jpeg;base64,not!base64!')).toMatch(/JPEG or PNG/);
+  });
+
+  test('rejects the oversize avatar (300k cap) with a human message', () => {
+    const huge = `data:image/png;base64,${'A'.repeat(300_000)}`;
+    expect(validateAvatarDataUrl(huge)).toMatch(/too large/i);
+  });
+});
+
+describe('validateProfileEditForm (doctorProfilePatchSchema mirror, Phase 11 A4)', () => {
+  const VALID: ProfileEditFormValues = {
+    specialization: 'Cardiologist',
+    fee: '300',
+    yearsExperience: '9',
+    bio: 'Heart specialist',
+    registrationNumber: 'BMDC-A-12345',
+    avatarUrl: null,
+  };
+
+  test('accepts a fully valid form (and all-blank optional fields)', () => {
+    expect(Object.keys(validateProfileEditForm(VALID))).toHaveLength(0);
+    expect(
+      Object.keys(
+        validateProfileEditForm({
+          specialization: '',
+          fee: '',
+          yearsExperience: '',
+          bio: '',
+          registrationNumber: '',
+          avatarUrl: null,
+        }),
+      ),
+    ).toHaveLength(0);
+  });
+
+  test('specialization cap is 120 chars', () => {
+    expect(
+      validateProfileEditForm({ ...VALID, specialization: 'x'.repeat(121) }).specialization,
+    ).toBeDefined();
+  });
+
+  test('fee is optional but whole-numbered and ≤ 100000 when present', () => {
+    expect(validateProfileEditForm({ ...VALID, fee: '0' }).fee).toBeUndefined();
+    expect(validateProfileEditForm({ ...VALID, fee: '299.50' }).fee).toMatch(/whole number/);
+    expect(validateProfileEditForm({ ...VALID, fee: '-5' }).fee).toMatch(/whole number/);
+    expect(validateProfileEditForm({ ...VALID, fee: '100001' }).fee).toMatch(/too large/);
+  });
+
+  test('yearsExperience is optional but whole-numbered and 0–80 when present', () => {
+    expect(
+      validateProfileEditForm({ ...VALID, yearsExperience: '0' }).yearsExperience,
+    ).toBeUndefined();
+    expect(validateProfileEditForm({ ...VALID, yearsExperience: '81' }).yearsExperience).toMatch(
+      /0–80/,
+    );
+    expect(validateProfileEditForm({ ...VALID, yearsExperience: '8.5' }).yearsExperience).toMatch(
+      /whole number/,
+    );
+  });
+
+  test('bio cap is 1000 chars', () => {
+    expect(validateProfileEditForm({ ...VALID, bio: 'x'.repeat(1001) }).bio).toMatch(/1000/);
+  });
+
+  test('registrationNumber: 3–40 chars, letters/digits/-/./ / only, blank clears', () => {
+    expect(
+      validateProfileEditForm({ ...VALID, registrationNumber: '' }).registrationNumber,
+    ).toBeUndefined();
+    expect(
+      validateProfileEditForm({ ...VALID, registrationNumber: 'AB' }).registrationNumber,
+    ).toMatch(/3–40/);
+    expect(
+      validateProfileEditForm({ ...VALID, registrationNumber: 'x'.repeat(41) }).registrationNumber,
+    ).toMatch(/3–40/);
+    expect(
+      validateProfileEditForm({ ...VALID, registrationNumber: 'BMDC-A-12#45' }).registrationNumber,
+    ).toMatch(/Letters, digits/);
+    expect(
+      validateProfileEditForm({ ...VALID, registrationNumber: 'BMDC/A 12345' }).registrationNumber,
+    ).toBeUndefined();
+  });
+
+  test('an invalid avatar surfaces as the avatarUrl field error', () => {
+    expect(
+      validateProfileEditForm({ ...VALID, avatarUrl: 'data:image/webp;base64,AAAA' }).avatarUrl,
+    ).toMatch(/JPEG or PNG/);
+    expect(
+      validateProfileEditForm({ ...VALID, avatarUrl: 'data:image/png;base64,AAAA' }).avatarUrl,
+    ).toBeUndefined();
   });
 });

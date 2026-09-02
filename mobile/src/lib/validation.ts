@@ -202,6 +202,91 @@ export function overrideTypeSelected(
   return { ...form, type };
 }
 
+// -- Phase 11 A4: doctor profile edit mirrors (api doctorProfilePatchSchema) ---
+
+/** Mirror of the api's AVATAR_MAX_CHARS (300,000). */
+export const AVATAR_MAX_CHARS = 300_000;
+
+/** Mirror of the api's data-URL rule: data:image/jpeg|png;base64,…. */
+const AVATAR_DATA_URL_RE = /^data:image\/(jpeg|png);base64,[A-Za-z0-9+/=]*$/;
+
+/** Mirror of the api's registration-number rules. */
+const REGISTRATION_NUMBER_RE = /^[A-Za-z0-9\-./ ]+$/;
+
+/**
+ * Client-side mirror of the avatar value rules (the server re-checks and
+ * returns 400 AVATAR_TOO_LARGE / AVATAR_INVALID). Human-readable errors for
+ * the error banner; null = valid.
+ */
+export function validateAvatarDataUrl(avatarUrl: string): string | null {
+  if (avatarUrl.length > AVATAR_MAX_CHARS) {
+    return `Photo is too large (${Math.round(avatarUrl.length / 1024)} KB of text — the limit is 300 KB). Try a simpler photo.`;
+  }
+  if (!AVATAR_DATA_URL_RE.test(avatarUrl)) {
+    return 'Photo must be a JPEG or PNG image. Take a new photo or pick another one.';
+  }
+  return null;
+}
+
+/** Form values for the doctor profile edit form (text fields are strings). */
+export interface ProfileEditFormValues {
+  specialization: string;
+  /** Raw text-field value — blank means "clear" (sent as null). */
+  fee: string;
+  /** Raw text-field value — blank means "clear" (sent as null). */
+  yearsExperience: string;
+  bio: string;
+  registrationNumber: string;
+  /** Data URL from the picker pipeline (null = keep the existing avatar). */
+  avatarUrl: string | null;
+}
+
+export type ProfileEditFormErrors = Partial<Record<keyof ProfileEditFormValues, string>>;
+
+/**
+ * Mirrors the api's doctorProfilePatchSchema (instant feedback — the server
+ * re-validates): specialization ≤ 120, fee 0–100000, years 0–80, bio ≤ 1000,
+ * registrationNumber 3–40 chars with the same charset.
+ */
+export function validateProfileEditForm(v: ProfileEditFormValues): ProfileEditFormErrors {
+  const errors: ProfileEditFormErrors = {};
+  if (v.specialization.trim().length > 120) {
+    errors.specialization = 'Specialization is too long (max 120)';
+  }
+  const feeRaw = v.fee.trim();
+  if (feeRaw !== '') {
+    if (!/^\d+$/.test(feeRaw)) {
+      errors.fee = 'Fee must be a whole number (₹)';
+    } else {
+      const fee = Number(feeRaw);
+      if (fee > 100_000) errors.fee = 'Fee is too large (max ₹100000)';
+    }
+  }
+  const yearsRaw = v.yearsExperience.trim();
+  if (yearsRaw !== '') {
+    if (!/^\d+$/.test(yearsRaw)) {
+      errors.yearsExperience = 'Years must be a whole number';
+    } else {
+      const years = Number(yearsRaw);
+      if (years > 80) errors.yearsExperience = 'Years must be 0–80';
+    }
+  }
+  if (v.bio.length > 1000) errors.bio = 'Bio is too long (max 1000)';
+  const reg = v.registrationNumber.trim();
+  if (reg !== '') {
+    if (reg.length < 3 || reg.length > 40) {
+      errors.registrationNumber = 'Registration number must be 3–40 characters';
+    } else if (!REGISTRATION_NUMBER_RE.test(reg)) {
+      errors.registrationNumber = 'Letters, digits, - . / and spaces only';
+    }
+  }
+  if (v.avatarUrl !== null) {
+    const avatarError = validateAvatarDataUrl(v.avatarUrl);
+    if (avatarError) errors.avatarUrl = avatarError;
+  }
+  return errors;
+}
+
 // -- Phase 8: admin console mirrors (api/src/lib/validation.ts) -----------------
 
 /** Rejection note — max 500 chars after trim (mirror of verifyDoctorSchema.note). */

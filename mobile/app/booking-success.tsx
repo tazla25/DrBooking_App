@@ -8,10 +8,13 @@ import { hapticSuccess } from '@/lib/haptics';
 import { colors, radii, spacing, typography } from '@/theme';
 
 /**
- * Booking success — the confirmation the spec asks for: big token number,
- * estimated wait, clinic, and the two ways forward (live queue / back to the
- * doctor). Reached via router.replace from the booking screen, so Back
- * naturally returns to the doctor detail.
+ * Booking received (Phase 11 B4) — the ONLINE booking lands PENDING: the
+ * serial is allocated and FINAL, but the clinic confirms it manually. This
+ * screen shows the pending state clearly — "Waiting for confirmation —
+ * Serial #N" — distinct from a confirmed booking (which the appointments
+ * list shows after the APPOINTMENT_CONFIRMED push). Reached via
+ * router.replace from the booking screen, so Back naturally returns to the
+ * doctor detail.
  */
 export default function BookingSuccessScreen() {
   const router = useRouter();
@@ -41,12 +44,12 @@ export default function BookingSuccessScreen() {
 
   return (
     <GlassScreen>
-      <GlassHeader title="Booking confirmed" back={false} />
+      <GlassHeader title="Booking received" back={false} />
       <View style={styles.body}>
         {/* -- the token -------------------------------------------------- */}
         <GlassCard padded style={styles.heroCard}>
           <View style={styles.checkCircle}>
-            <Ionicons name="checkmark" size={34} color={colors.success} />
+            <Ionicons name="hourglass-outline" size={30} color={colors.status.PENDING.fg} />
           </View>
           <Text style={styles.doctorName}>{params.doctorName}</Text>
           <Text style={styles.clinicName}>{params.clinicName}</Text>
@@ -62,12 +65,13 @@ export default function BookingSuccessScreen() {
 
         {/* -- token + wait ------------------------------------------------- */}
         <GlassCard padded style={styles.tokenCard}>
-          <Text style={styles.tokenLabel}>Your token</Text>
+          <Text style={styles.tokenLabel}>Your serial</Text>
           <Text style={styles.token}>#{position}</Text>
+          <Text style={styles.pendingChip}>Waiting for confirmation</Text>
           <Text style={styles.waitHint}>
             {estWaitMin > 0
-              ? `Estimated wait ~${estWaitMin} min — watch the live queue`
-              : 'You are first in the queue'}
+              ? `Serial #${position} is reserved — estimated wait ~${estWaitMin} min once the clinic confirms.`
+              : `Serial #${position} is reserved — you would be first once the clinic confirms.`}
           </Text>
         </GlassCard>
 
@@ -83,7 +87,8 @@ export default function BookingSuccessScreen() {
           onPress={() => router.push(`/doctor/${params.doctorProfileId}`)}
         />
         <Text style={styles.footnote}>
-          Show token #{position} at the clinic desk. A confirmation notification is on its way.
+          Show serial #{position} at the clinic desk. You will get a notification the moment your
+          appointment is confirmed.
         </Text>
       </View>
     </GlassScreen>
@@ -103,9 +108,9 @@ const styles = StyleSheet.create({
     borderRadius: radii.round, // true circle — token, not literal
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(59, 178, 115, 0.16)',
+    backgroundColor: 'rgba(245, 166, 35, 0.16)',
     borderWidth: 1,
-    borderColor: 'rgba(59, 178, 115, 0.40)',
+    borderColor: 'rgba(245, 166, 35, 0.40)',
     marginBottom: spacing.sm,
   },
   doctorName: { ...typography.h2, color: colors.text.primary },
@@ -135,6 +140,12 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   waitHint: { ...typography.caption, color: colors.text.secondary, textAlign: 'center' },
+  pendingChip: {
+    ...typography.micro,
+    color: colors.status.PENDING.fg,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
   footnote: {
     ...typography.caption,
     color: colors.text.secondary,
