@@ -583,3 +583,18 @@ Stage Summary:
 - Future work (documented, out of scope per §5): auto-expiry of stale PENDING; patient-visible "why rejected" note surfacing; rename of the BOOKING_CONFIRMED push type (copy already pending-aware).
 - BUILD ARTIFACT (self-verified from my own download, container-side scripts/phase11/ — auditor re-download will byte-match): drbooking-phase11.apk — 103,915,977 bytes, sha256 05fc38605930c09889c785bb7b5afc818e763b95a6a3d4821488210e7a0bf0a2, md5 412cb94c915ed96eac74cacc98135ef5, downloaded 2026-09-02T09:49:39Z from the EAS artifact URL. Bundle fingerprints: app.config name ClinIQ / slug dr-booking-mobile / root #4A9FE8 / splash #AACCFB / version 1.0.0; Hermes bundle contains expo-image-picker + ImageManipulator + ExpoHaptics + "APPOINTMENT_CONFIRMED" + "Waiting for confirmation" + "Registration No" + Inter-Regular/SemiBold/Bold; the 3 Inter ttf are in res/ under AAPT-obfuscated names with BYTE-EXACT sizes (326444/326024/324796).
 - PUSH BLOCKED (GitHub token invalid): three push attempts failed with "remote: Invalid username or token"; api.github.com answers 401 Bad credentials for the supplied token (Bearer and token forms); the earlier clone succeeded only because the repo is public. Branch v2/phase-11 (HEAD 699e400) sits fully committed and gated locally, ready to push + PR the moment a valid token is supplied: `git push -u origin v2/phase-11` then open the PR v2/phase-11 → main with the prepared description (container-side scripts/phase11/pr-body.md).
+
+---
+Task ID: 11-m
+Agent: Super Z (main agent)
+Task: Phase 11 GitHub-unblock — token re-supplied, push + PR (was blocked at 11/0dcbd90)
+
+Work Log:
+- Owner re-supplied a fresh GitHub token. Verified BEFORE any push: api.github.com /user → HTTP 200 (login `tazla25`), /repos/tazla25/DrBooking_App → HTTP 200 with push permission. No token written to any file (L9 — used only transiently for auth).
+- S5 re-verified with the valid token: `git fetch origin main` → origin/main still exactly f4c749c90be3b52f66e8db76bbd76454bcf51422 (f4c749c, "Merge pull request #11"); local branch HEAD is its descendant. No divergence, no force-push (L3 — plain push only).
+- `git push -u origin v2/phase-11` → success (branch 0dcbd90 → origin, first push). This docs commit (phase-11e) is then pushed incrementally on top.
+- PR `v2/phase-11` → `main` opened via the GitHub API with the full phase-11 delivery report as the description (base, verbatim gates, per-file authorization, EAS build 472a61bd byte-verification, decisions, MIGRATION.md summary, resolved-blocker section). Agent NEVER merges (L2).
+- No code changed in this step (docs-only): gates were all green at 0dcbd90 and remain green — the EAS artifact 472a61bd (from code HEAD a93a3fa) stays exactly the verified APK (103,915,977 bytes, sha256 05fc3860…, md5 412cb94c…) — fresh, never recycled.
+
+Stage Summary:
+- Phase 11 delivery fully unblocked: branch pushed, PR open, all gates green, fresh EAS APK byte-verified. Remaining owner steps: run MIGRATION.md (db push → merge → Vercel → EAS) — the agent never touches production or merges.
