@@ -388,8 +388,12 @@ export default function StaffTodayScreen() {
             data={queueRows}
             keyExtractor={(item) => item.id}
             renderItem={renderItem}
+            testID="today-queue-list"
             refreshing={queue.refreshing}
-            onRefresh={() => void queue.refresh()}
+            onRefresh={() => {
+              void queue.refresh();
+              void queue.rescan(); // FIX B: pull-to-refresh rescans the horizon
+            }}
             contentContainerStyle={styles.listContent}
             ListHeaderComponent={
               <View style={styles.headerStack}>
@@ -405,6 +409,30 @@ export default function StaffTodayScreen() {
                           appointment={item}
                           onConfirm={() => void onConfirmPending(item)}
                           onReject={() => openReject(item)}
+                        />
+                      </AnimatedEntrance>
+                    ))}
+                  </GlassCard>
+                ) : null}
+                {/* -- UPCOMING pending (mobilefix1 FIX B) — FUTURE-date bookings
+                      awaiting confirmation, adjacent to the card above so a
+                      booking on ANY horizon date is discoverable without
+                      hunting the date strip. Zero rows → zero visual noise. */}
+                {queue.upcomingPending.length > 0 ? (
+                  <GlassCard padded style={styles.card}>
+                    <Text
+                      style={styles.pendingSectionTitle}
+                      accessibilityLabel={`Awaiting confirmation, upcoming bookings: ${queue.upcomingPending.length}`}
+                    >
+                      Awaiting confirmation — upcoming ({queue.upcomingPending.length})
+                    </Text>
+                    {queue.upcomingPending.map((row, index) => (
+                      <AnimatedEntrance key={row.appointment.id} index={index}>
+                        <PendingRow
+                          appointment={row.appointment}
+                          forDate={row.date}
+                          onConfirm={() => void onConfirmPending(row.appointment)}
+                          onReject={() => openReject(row.appointment)}
                         />
                       </AnimatedEntrance>
                     ))}
@@ -729,14 +757,19 @@ export default function StaffTodayScreen() {
 
 function PendingRow({
   appointment,
+  forDate,
   onConfirm,
   onReject,
 }: {
   appointment: StaffQueueAppointment;
+  /** mobilefix1 FIX B: the booking's IST date ('YYYY-MM-DD') — present ONLY on
+   * upcoming (future-date) rows; the selected-date card omits it. */
+  forDate?: string;
   onConfirm: () => void;
   onReject: () => void;
 }) {
   const bookedAt = istTimeOfISO(appointment.createdAt);
+  const forDateLabel = forDate ? formatDateISO(forDate) : null;
   return (
     <GlassCard nested style={styles.pendingRow}>
       <View style={styles.rowTop}>
@@ -758,6 +791,14 @@ function PendingRow({
           Booked {bookedAt ? `${bookedAt} IST` : 'earlier'} · awaiting confirmation
         </Text>
       </View>
+      {forDateLabel ? (
+        <View style={styles.metaRow}>
+          <Ionicons name="calendar-outline" size={14} color={colors.text.secondary} />
+          <Text style={styles.metaText} accessibilityLabel={`Appointment date ${forDateLabel}`}>
+            For {forDateLabel}
+          </Text>
+        </View>
+      ) : null}
       <View style={styles.rowActions}>
         <PrimaryButton
           label="Confirm"

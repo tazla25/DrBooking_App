@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   Avatar,
   GlassButton,
@@ -30,7 +30,13 @@ export default function ProfileScreen() {
   return (
     <GlassScreen>
       <GlassHeader title="Profile" back={false} />
-      <View style={styles.body}>
+      {/* mobilefix1 BUG-1: same defect class as the staff profile — bounded
+          ScrollView so Sign out stays reachable when content grows. */}
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.body}
+        showsVerticalScrollIndicator={false}
+      >
         <GlassCard padded style={styles.card}>
           <View style={styles.identityRow}>
             <Avatar name={user.name} size={64} />
@@ -93,7 +99,7 @@ export default function ProfileScreen() {
         ) : null}
 
         <Text style={styles.version}>ClinIQ · Phase 10</Text>
-      </View>
+      </ScrollView>
     </GlassScreen>
   );
 }
@@ -132,8 +138,10 @@ function InfoRow({
 }
 
 const styles = StyleSheet.create({
+  // mobilefix1: flex:1 dropped from body (sizes to content inside the
+  // ScrollView); the 96 runway stays — the documented tab-screen literal.
+  scroll: { flex: 1 },
   body: {
-    flex: 1,
     padding: spacing.base,
     // B4: floating glass tab bar (~48px + safe inset) + breathing room. 96 is
     // the ONE documented literal (worklog 10-g) — the largest spacing token

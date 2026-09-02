@@ -6,12 +6,33 @@ import {
   type StaffQueueAppointment,
   type TodayQueueResponse,
 } from '@/lib/staff';
+import { addDaysISO, istTodayISO } from '@/lib/time';
 import { toFriendlyMessage } from '@/lib/errors';
 
 /**
  * The Today tab auto-refresh cadence (same 15s as the patient live queue).
  */
 export const TODAY_QUEUE_POLL_INTERVAL_MS = 15_000;
+
+/**
+ * mobilefix1 FIX B — upcoming-pending scan window: the 7 IST days AFTER today
+ * (mirrors the patient book screen's DATE_STRIP_DAYS = 7 horizon, so a
+ * future-dated booking is always within the scan range).
+ */
+export const UPCOMING_SCAN_DAYS = 7;
+
+/** One upcoming-pending row: the appointment + the IST date it belongs to. */
+export interface UpcomingPendingRow {
+  appointment: StaffQueueAppointment;
+  /** 'YYYY-MM-DD' IST — the booking's date (verbatim, never converted). */
+  date: string;
+}
+
+/** The scan dates: today + 1 … today + UPCOMING_SCAN_DAYS (IST strings). */
+function upcomingScanDates(): string[] {
+  const today = istTodayISO();
+  return Array.from({ length: UPCOMING_SCAN_DAYS }, (_, i) => addDaysISO(today, i + 1));
+}
 
 interface QueueState {
   data: TodayQueueResponse | null;
@@ -69,6 +90,16 @@ function withAppointmentStatus(
  *  - `pending`: the derived PENDING rows (top section of the console).
  *  Both return a friendly error message (null on success) for the toast.
  *
+ * mobilefix1 FIX B — `upcomingPending`: PENDING bookings for FUTURE dates
+ * (today + 1 … + 7, the book-screen horizon) EXCLUDING the selected date
+ * (those already render in the pending card). The scan reuses the EXISTING
+ * `fetchTodayQueue(date)` (L2 — no new endpoints), bounded parallel (7
+ * requests), dedupes by appointment id, runs on focus / date change /
+ * pull-to-refresh / after every confirm/reject settles — and NEVER on the
+ * 15s poll tick (bounded cost). A date whose fetch fails is simply absent
+ * (its last-good rows are kept — no error banner; the selected-date queue
+ * owns error UX). Nothing here blocks the console's first render.
+ *
  * TIME LAW: `date` is a verbatim 'YYYY-MM-DD' IST string — never converted.
  * Rule-safe updates: no synchronous setState inside effect bodies.
  */
@@ -81,6 +112,61 @@ export function useTodayQueue(date: string, active: boolean) {
   });
 
   const inFlight = useRef(false);
+
+  // -- FIX B: the upcoming-pending scan state (last-good, all horizon dates;
+  // the SELECTED date is excluded at derive time so switching dates
+  // re-partitions the two cards instantly, without waiting for the network).
+  const [upcomingScan, setUpcomingScan] = useState<UpcomingPendingRow[]>([]);
+  const scanInFlight = useRef(false);
+
+  /** Scan the next 7 IST days for PENDING rows (bounded parallel reusing
+   * fetchTodayQueue). Failed dates keep their last-good rows; ids dedupe. */
+  const scanUpcoming = useCallback(async (): Promise<void> => {
+    if (scanInFlight.current) return; // bounded: never stack scans
+    scanInFlight.current = true;
+    try {
+      const dates = upcomingScanDates();
+      const results = await Promise.all(dates.map((d) => fetchTodayQueue(d).catch(() => null)));
+      setUpcomingScan((prev) => {
+        const prevByDate = new Map<string, UpcomingPendingRow[]>();
+        for (const row of prev) {
+          const list = prevByDate.get(row.date);
+          if (list) list.push(row);
+          else prevByDate.set(row.date, [row]);
+        }
+        const seen = new Set<string>();
+        const merged: UpcomingPendingRow[] = [];
+        results.forEach((data, i) => {
+          const date = dates[i];
+          if (data) {
+            // Fresh rows for this date replace its last-good rows.
+            for (const a of data.appointments) {
+              if (a.status !== 'PENDING' || seen.has(a.id)) continue;
+              seen.add(a.id);
+              merged.push({ appointment: a, date });
+            }
+          } else {
+            // Failed date — keep its last-good rows (deduped).
+            for (const row of prevByDate.get(date) ?? []) {
+              if (seen.has(row.appointment.id)) continue;
+              seen.add(row.appointment.id);
+              merged.push(row);
+            }
+          }
+        });
+        return merged;
+      });
+    } finally {
+      scanInFlight.current = false;
+    }
+  }, []);
+
+  // FIX B scan triggers: on (re)focus and when the selected date changes —
+  // but NEVER on the 15s poll tick below (bounded cost).
+  useEffect(() => {
+    if (!active) return; // unfocused: no scan
+    void scanUpcoming();
+  }, [active, date, scanUpcoming]);
 
   useEffect(() => {
     if (!active) return; // unfocused: no timer, no fetches
@@ -153,15 +239,17 @@ export function useTodayQueue(date: string, active: boolean) {
       try {
         await confirmAppointment(id);
         void refresh(); // re-sync counts + estWaitMin after the server commit
+        void scanUpcoming(); // FIX B: the confirmed row leaves the upcoming card
         return null;
       } catch (err) {
         setState((s) =>
           s.data ? { ...s, data: withAppointmentStatus(s.data, id, 'CONFIRMED', 'PENDING') } : s,
         );
+        void scanUpcoming(); // settle: re-validate after either outcome
         return toFriendlyMessage(err);
       }
     },
-    [refresh],
+    [refresh, scanUpcoming],
   );
 
   /**
@@ -181,12 +269,14 @@ export function useTodayQueue(date: string, active: boolean) {
       try {
         const result = await rejectAppointment(id, phone, trimmedNote || undefined);
         await refresh();
+        void scanUpcoming(); // FIX B: the rejected row leaves the upcoming card
         return { error: null, noteWarning: result.noteWarning };
       } catch (err) {
+        void scanUpcoming(); // settle: re-validate after either outcome
         return { error: toFriendlyMessage(err), noteWarning: null };
       }
     },
-    [refresh, state.data],
+    [refresh, scanUpcoming, state.data],
   );
 
   const stale = state.data !== null && state.loadedFor !== date;
@@ -196,6 +286,12 @@ export function useTodayQueue(date: string, active: boolean) {
     () =>
       stale || !state.data ? [] : state.data.appointments.filter((a) => a.status === 'PENDING'),
     [state.data, stale],
+  );
+
+  /** FIX B — PENDING rows on FUTURE dates (horizon minus the selected date). */
+  const upcomingPending = useMemo(
+    () => upcomingScan.filter((row) => row.date !== date),
+    [upcomingScan, date],
   );
 
   return {
@@ -209,5 +305,9 @@ export function useTodayQueue(date: string, active: boolean) {
     pending,
     confirmPending,
     rejectPending,
+    /** mobilefix1 FIX B: future-date pending rows (each with its IST date) +
+     * a manual rescan (pull-to-refresh uses it alongside refresh()). */
+    upcomingPending,
+    rescan: scanUpcoming,
   };
 }
