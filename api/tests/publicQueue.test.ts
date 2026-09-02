@@ -33,7 +33,8 @@ interface QueueView {
   doctor: { fullName: string; specialization: string | null };
   current: { queueNumber: number; patientName: string } | null;
   upNext: { queueNumber: number; patientName: string; estWaitMin: number }[];
-  counts: { completed: number; called: number; waiting: number };
+  pending: { queueNumber: number; patientName: string }[];
+  counts: { completed: number; called: number; waiting: number; pending: number };
   my: { id: string; queueNumber: number; status: string; estWaitMin: number } | null;
 }
 
@@ -137,7 +138,8 @@ describe('GET /api/queue/:scheduleId/:date (public live queue, #12)', () => {
     expect(data.upNext[1].estWaitMin).toBe(30); // queue 1 + queue 2 ahead
     expect(data.upNext[2].estWaitMin).toBe(45);
 
-    expect(data.counts).toEqual({ completed: 1, called: 1, waiting: 3 });
+    expect(data.counts).toEqual({ completed: 1, called: 1, waiting: 3, pending: 0 });
+    expect(data.pending).toEqual([]);
 
     // Anonymous → my: null.
     expect(data.my).toBeNull();
@@ -192,7 +194,69 @@ describe('GET /api/queue/:scheduleId/:date (public live queue, #12)', () => {
     expect(data.date).toBe(yesterday);
     expect(data.current).toBeNull(); // yesterday's only appointment is COMPLETED
     expect(data.upNext).toEqual([]);
-    expect(data.counts).toEqual({ completed: 1, called: 0, waiting: 0 });
+    expect(data.counts).toEqual({ completed: 1, called: 0, waiting: 0, pending: 0 });
+  });
+
+  it('PENDING rows: masked, own list + count, NOT in upNext (Phase 11 B2)', async () => {
+    // Two pending bookings for TOMORROW is wrong — the queue screen is
+    // per-date; add PENDING rows to TODAY's queue.
+    await createAppointmentFixture(schedule.id, doctor.doctorId, {
+      date: today,
+      queueNumber: 8,
+      status: 'PENDING',
+      patientName: 'Waiting Person',
+      patientPhone: '+919823000009',
+      patientId: null,
+    });
+    await createAppointmentFixture(schedule.id, doctor.doctorId, {
+      date: today,
+      queueNumber: 9,
+      status: 'PENDING',
+      patientName: 'X',
+      patientPhone: '+919823000010',
+      patientId: null,
+    });
+
+    const body = await readResponse(await queue(schedule.id, today));
+    expect(body.status).toBe(200);
+    const data = body.data as QueueView;
+
+    // Pending list: masked names, queue order, serials visible.
+    expect(data.pending).toEqual([
+      { queueNumber: 8, patientName: 'W***n' },
+      { queueNumber: 9, patientName: 'X***' },
+    ]);
+    expect(data.counts.pending).toBe(2);
+
+    // NOT in upNext — only confirmed patients are up next.
+    expect(data.upNext.map((u) => u.queueNumber)).toEqual([2, 3, 4]);
+
+    // estWait for the confirmed #4 now includes the… no — the PENDING rows
+    // are AFTER #4 in queue order, so the ahead-count is unchanged (the
+    // ahead-set counts by queueNumber, pending rows sit at 8/9).
+    expect(data.upNext[2].estWaitMin).toBe(45);
+
+    // A PENDING booking of the CALLER takes priority in `my` (their live
+    // booking) — verify with a fresh patient who owns queue 8.
+    const pendingPatient = await createPatientFixture({ phone: '9823000030', name: 'Waiting Person' });
+    const pendingRow = await db.appointment.findFirstOrThrow({
+      where: { scheduleId: schedule.id, date: today, queueNumber: 8 },
+    });
+    await db.appointment.update({
+      where: { id: pendingRow.id },
+      data: { patientId: pendingPatient.userId },
+    });
+    const mine = await readResponse(await queue(schedule.id, today, pendingPatient.token));
+    expect(mine.status).toBe(200);
+    const myData = mine.data as QueueView;
+    expect(myData.my).not.toBeNull();
+    expect(myData.my!.queueNumber).toBe(8);
+    expect(myData.my!.status).toBe('PENDING');
+
+    // MASKING LAW: the pending list carries no phones/PII (deep-scan).
+    const pendingJson = JSON.stringify(data.pending);
+    expect(pendingJson).not.toContain('+919823000009');
+    expect(pendingJson).not.toContain('9823000009');
   });
 
   it('invalid date → 422; unknown or inactive schedule → 404', async () => {

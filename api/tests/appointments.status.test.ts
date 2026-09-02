@@ -1,4 +1,5 @@
 import { POST as statusRoute } from '@/app/api/appointments/[id]/status/route';
+import * as pushModule from '@/lib/push';
 import { db } from '@/lib/db';
 import {
   postRequest,
@@ -28,11 +29,14 @@ describe('POST /api/appointments/:id/status', () => {
   let foreignApptId: string;
 
   // Fresh CONFIRMED appointment helper (state machine tests consume them).
-  async function freshAppointment(n: number) {
+  // Phone tail is zero-padded so queue numbers > 9 still produce a valid
+  // 10-digit fixture phone (n=1 → 9813330001, n=101 → 9813330101).
+  async function freshAppointment(n: number, status = 'CONFIRMED') {
     return createAppointmentFixture(scheduleA.id, doctorA.doctorId, {
       queueNumber: n,
-      patientPhone: `981333000${n}`,
+      patientPhone: `981333${String(n).padStart(4, '0')}`,
       patientName: `Status Patient ${n}`,
+      status,
     });
   }
 
@@ -59,6 +63,63 @@ describe('POST /api/appointments/:id/status', () => {
       await freshAppointment(5),
       await freshAppointment(6),
     ];
+  });
+
+  it('PENDING → CONFIRMED is legal (the manual confirm action, Phase 11 B2) and audited + pushed', async () => {
+    const pending = await freshAppointment(101, 'PENDING');
+    const notifySpy = jest.spyOn(pushModule, 'notifyUser').mockImplementation(() => undefined);
+    try {
+      const body = await readResponse(await setStatus(pending.id, 'CONFIRMED', doctorA.token));
+      expect(body.status).toBe(200);
+      expect((body.data as { appointment: { status: string } }).appointment.status).toBe(
+        'CONFIRMED',
+      );
+
+      // Audit: the manual confirmation is a staff decision (B2).
+      const audit = await db.auditLog.findFirst({
+        where: { action: 'APPOINTMENT_CONFIRMED', target: `appointment:${pending.id}` },
+      });
+      expect(audit).not.toBeNull();
+
+      // Push: fire-and-forget to the patient (walk-ins pass patientId null —
+      // notifyUser itself skips; the wiring is what is asserted).
+      expect(notifySpy).toHaveBeenCalledTimes(1);
+      const [pushUserId, message] = notifySpy.mock.calls[0] as [
+        string | null,
+        pushModule.PushMessage,
+      ];
+      expect(pushUserId).toBeNull(); // fixture default has no patient account
+      expect(message.title).toBe('Appointment confirmed');
+      expect(message.body).toContain(`Serial #${pending.queueNumber}`);
+      expect(message.data?.type).toBe('APPOINTMENT_CONFIRMED');
+      expect(message.data?.appointmentId).toBe(pending.id);
+    } finally {
+      notifySpy.mockRestore();
+    }
+  });
+
+  it('PENDING → CANCELLED is legal (the staff reject action)', async () => {
+    const pending = await freshAppointment(102, 'PENDING');
+    const body = await readResponse(await setStatus(pending.id, 'CANCELLED', doctorA.token));
+    expect(body.status).toBe(200);
+    const audit = await db.auditLog.findFirst({
+      where: { action: 'APPOINTMENT_CANCELLED', target: `appointment:${pending.id}` },
+    });
+    expect(audit).not.toBeNull();
+  });
+
+  it('PENDING → CALLED is illegal (confirm first) → 409', async () => {
+    const pending = await freshAppointment(103, 'PENDING');
+    const body = await readResponse(await setStatus(pending.id, 'CALLED', doctorA.token));
+    expect(body.status).toBe(409);
+    expect(body.error?.code).toBe('INVALID_TRANSITION');
+  });
+
+  it('CONFIRMED → PENDING is illegal (one-way confirmation) → 409', async () => {
+    const body = await readResponse(await setStatus(appts[0].id, 'PENDING', doctorA.token));
+    expect(body.status).toBe(409);
+    expect(body.error?.code).toBe('INVALID_TRANSITION');
+    expect(body.error?.message).toContain('PENDING');
   });
 
   it('CONFIRMED → CALLED is legal (and writes NO audit row)', async () => {
@@ -140,9 +201,12 @@ describe('POST /api/appointments/:id/status', () => {
     const missing = await readResponse(await setStatus('does-not-exist', 'CALLED', doctorA.token));
     expect(missing.status).toBe(404);
 
+    // A truly unknown value → 422 at the schema gate. (PENDING and CONFIRMED
+    // are both schema-accepted now — the ALLOWED_TRANSITIONS map is what
+    // rejects CONFIRMED→PENDING with an explicit 409, see the test above.)
     const invalid = await readResponse(
       await statusRoute(
-        postRequest(`${API}/api/appointments/${appts[0].id}/status`, { status: 'CONFIRMED' }, doctorA.token),
+        postRequest(`${API}/api/appointments/${appts[0].id}/status`, { status: 'BOGUS' }, doctorA.token),
         routeContext({ id: appts[0].id }),
       ),
     );

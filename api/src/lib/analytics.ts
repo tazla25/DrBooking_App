@@ -16,6 +16,7 @@ import { addDaysISO, istTodayISO } from '@/lib/time';
 
 export interface DayMetrics {
   booked: number; // appointments created for the window (ONLINE + WALK_IN, any status)
+  pending: number; // Phase 11: PENDING (manual-confirmation inbox) — neither revenue nor completed
   completed: number;
   cancelled: number;
   noShow: number;
@@ -24,7 +25,7 @@ export interface DayMetrics {
 }
 
 export function emptyMetrics(): DayMetrics {
-  return { booked: 0, completed: 0, cancelled: 0, noShow: 0, walkIns: 0, revenue: 0 };
+  return { booked: 0, pending: 0, completed: 0, cancelled: 0, noShow: 0, walkIns: 0, revenue: 0 };
 }
 
 interface MetricRow {
@@ -43,6 +44,10 @@ function accumulate(m: DayMetrics, row: MetricRow): void {
     m.cancelled += 1;
   } else if (row.status === 'NO_SHOW') {
     m.noShow += 1;
+  } else if (row.status === 'PENDING') {
+    // Phase 11: pending counts as neither completed nor revenue — it is the
+    // manual-confirmation backlog, reported separately (additive metric).
+    m.pending += 1;
   }
   if (row.source === 'WALK_IN') m.walkIns += 1;
 }

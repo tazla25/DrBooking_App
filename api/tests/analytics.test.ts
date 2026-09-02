@@ -1,5 +1,6 @@
 import { GET as summaryRoute } from '@/app/api/analytics/summary/route';
 import { GET as revenueRoute } from '@/app/api/analytics/revenue/route';
+import { db } from '@/lib/db';
 import { addDaysISO, istTodayISO } from '@/lib/time';
 import {
   getRequest,
@@ -73,27 +74,47 @@ describe('Analytics (#29 summary, #30 revenue)', () => {
     expect((await readResponse(await revenue(compounder.token))).status).toBe(403);
   });
 
-  it('summary: TODAY counts (booked/completed/cancelled/noShow/walkIns/revenue)', async () => {
+  it('summary: TODAY counts (booked/pending/completed/cancelled/noShow/walkIns/revenue)', async () => {
     const body = await readResponse(await summary(doctorA.token));
     expect(body.status).toBe(200);
     const data = body.data as {
       doctorId: string;
-      today: { booked: number; completed: number; cancelled: number; noShow: number; walkIns: number; revenue: number };
+      today: { booked: number; pending: number; completed: number; cancelled: number; noShow: number; walkIns: number; revenue: number };
     };
     expect(data.doctorId).toBe(doctorA.doctorId);
-    expect(data.today).toEqual({ booked: 5, completed: 2, cancelled: 1, noShow: 1, walkIns: 2, revenue: 800 });
+    expect(data.today).toEqual({ booked: 5, pending: 0, completed: 2, cancelled: 1, noShow: 1, walkIns: 2, revenue: 800 });
   });
 
   it('summary: last7d and last30d totals with exact IST day boundaries', async () => {
     const body = await readResponse(await summary(doctorA.token));
     const data = body.data as {
-      last7d: { booked: number; completed: number; cancelled: number; noShow: number; walkIns: number; revenue: number };
-      last30d: { booked: number; completed: number; cancelled: number; noShow: number; walkIns: number; revenue: number };
+      last7d: { booked: number; pending: number; completed: number; cancelled: number; noShow: number; walkIns: number; revenue: number };
+      last30d: { booked: number; pending: number; completed: number; cancelled: number; noShow: number; walkIns: number; revenue: number };
     };
     // today(5) + yesterday(1) + today-6(1): boundary day today-6 IS in, today-7 is OUT.
-    expect(data.last7d).toEqual({ booked: 7, completed: 4, cancelled: 1, noShow: 1, walkIns: 3, revenue: 1600 });
+    expect(data.last7d).toEqual({ booked: 7, pending: 0, completed: 4, cancelled: 1, noShow: 1, walkIns: 3, revenue: 1600 });
     // adds today-7 (completed 500) and today-29 (cancelled): today-30 and future are OUT.
-    expect(data.last30d).toEqual({ booked: 9, completed: 5, cancelled: 2, noShow: 1, walkIns: 3, revenue: 2100 });
+    expect(data.last30d).toEqual({ booked: 9, pending: 0, completed: 5, cancelled: 2, noShow: 1, walkIns: 3, revenue: 2100 });
+  });
+
+  it('summary: PENDING counts as pending only — never completed, never revenue (Phase 11 B2)', async () => {
+    // Two pending bookings TODAY for doctor A.
+    await createAppointmentFixture(scheduleA.id, doctorA.doctorId, { date: today, queueNumber: 6, status: 'PENDING', source: 'ONLINE', fee: 500 });
+    await createAppointmentFixture(scheduleA.id, doctorA.doctorId, { date: today, queueNumber: 7, status: 'PENDING', source: 'ONLINE', fee: 500 });
+
+    const body = await readResponse(await summary(doctorA.token));
+    expect(body.status).toBe(200);
+    const data = body.data as {
+      today: { booked: number; pending: number; completed: number; cancelled: number; noShow: number; walkIns: number; revenue: number };
+      last7d: { booked: number; pending: number; revenue: number };
+    };
+    // booked grew by 2 (rows exist), pending = 2, completed/revenue UNCHANGED.
+    expect(data.today).toEqual({ booked: 7, pending: 2, completed: 2, cancelled: 1, noShow: 1, walkIns: 2, revenue: 800 });
+    expect(data.last7d.pending).toBe(2);
+    expect(data.last7d.revenue).toBe(1600); // untouched by PENDING rows
+
+    // Cleanup so later revenue-series fixtures stay honest.
+    await db.appointment.deleteMany({ where: { scheduleId: scheduleA.id, date: today, queueNumber: { in: [6, 7] } } });
   });
 
   it('summary: strictly scoped to the doctor (other doctor invisible)', async () => {

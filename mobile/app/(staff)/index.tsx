@@ -43,7 +43,7 @@ import {
   type StaffSchedule,
   type TodayQueueCounts,
 } from '@/lib/staff';
-import { addDaysISO, dayOfWeekISO, istTodayISO } from '@/lib/time';
+import { addDaysISO, dayOfWeekISO, istTimeOfISO, istTodayISO } from '@/lib/time';
 import type { MeResponse } from '@/lib/types';
 import {
   normalizePhoneInput,
@@ -61,6 +61,7 @@ const DATE_STRIP_BACK = 3;
 const DATE_STRIP_FORWARD = 7;
 
 const COUNT_CARDS: { key: keyof TodayQueueCounts; label: string }[] = [
+  { key: 'pending', label: 'Pending' },
   { key: 'confirmed', label: 'Confirmed' },
   { key: 'called', label: 'Called' },
   { key: 'completed', label: 'Completed' },
@@ -73,6 +74,12 @@ const COUNT_CARDS: { key: keyof TodayQueueCounts; label: string }[] = [
  * for a business date (default IST today; history browsing allowed — past
  * dates are read-only), 15s focus-polling, full patient names + phones BY
  * DESIGN (masking exists only on the public patient queue).
+ *
+ * Phase 11 B3: a PENDING section sits ABOVE the confirmed queue — online
+ * bookings land there awaiting manual confirmation. Confirm = single tap
+ * (optimistic, rolls back on failure); Reject = glass confirm modal with an
+ * optional note (persisted as a patient note) → CANCELLED. The serial never
+ * changes on confirmation (it was allocated at booking).
  *
  * Queue actions follow the server's transition matrix exactly; "Call next"
  * and walk-ins are TODAY-gated per the server rules (queue/next always
@@ -167,7 +174,6 @@ export default function StaffTodayScreen() {
   const [confirmTarget, setConfirmTarget] = useState<StaffQueueAppointment | null>(null);
   const [confirmAction, setConfirmAction] = useState<SettableStatus>('CANCELLED');
   const [confirming, setConfirming] = useState(false);
-
   const applyStatus = async (
     appointment: StaffQueueAppointment,
     status: SettableStatus,
@@ -220,6 +226,51 @@ export default function StaffTodayScreen() {
     } else {
       void applyStatus(appointment, status);
     }
+  };
+
+  // -- PENDING section: manual confirm / reject (Phase 11 B3) ------------------
+
+  const onConfirmPending = async (appointment: StaffQueueAppointment) => {
+    hapticSelection(); // instant tick — the optimistic flip is immediate
+    const error = await queue.confirmPending(appointment.id);
+    if (error === null) {
+      hapticSuccess();
+      show(`Serial #${appointment.queueNumber} confirmed — patient notified`, 'success');
+    } else {
+      // The hook already rolled the optimistic flip back.
+      show(error, 'error');
+    }
+  };
+
+  const [rejectTarget, setRejectTarget] = useState<StaffQueueAppointment | null>(null);
+  const [rejectNote, setRejectNote] = useState('');
+  const [rejecting, setRejecting] = useState(false);
+  const [rejectError, setRejectError] = useState<string | null>(null);
+
+  const openReject = (appointment: StaffQueueAppointment) => {
+    setRejectError(null);
+    setRejectNote('');
+    setRejectTarget(appointment);
+  };
+
+  const doReject = async () => {
+    if (!rejectTarget || rejecting) return;
+    setRejecting(true);
+    setRejectError(null);
+    const { error, noteWarning } = await queue.rejectPending(rejectTarget.id, rejectNote);
+    setRejecting(false);
+    if (error) {
+      setRejectError(error); // keep the modal open — nothing changed server-side
+      return;
+    }
+    hapticWarning(); // destructive confirmation
+    const token = rejectTarget.queueNumber;
+    setRejectTarget(null);
+    setRejectNote('');
+    show(
+      noteWarning ?? `Serial #${token} rejected — the patient is notified of the cancellation`,
+      noteWarning ? 'info' : 'success',
+    );
   };
 
   // -- walk-in modal ------------------------------------------------------------
@@ -311,6 +362,10 @@ export default function StaffTodayScreen() {
     </AnimatedEntrance>
   );
 
+  // The confirmed queue EXCLUDES the pending rows — they render in their own
+  // section at the top (the pending list comes from the hook, same data).
+  const queueRows = (data?.appointments ?? []).filter((a) => a.status !== 'PENDING');
+
   return (
     <GlassScreen>
       <GlassHeader title="Today" back={false} />
@@ -330,7 +385,7 @@ export default function StaffTodayScreen() {
           </GlassCard>
         ) : (
           <FlatList
-            data={data?.appointments ?? []}
+            data={queueRows}
             keyExtractor={(item) => item.id}
             renderItem={renderItem}
             refreshing={queue.refreshing}
@@ -338,6 +393,23 @@ export default function StaffTodayScreen() {
             contentContainerStyle={styles.listContent}
             ListHeaderComponent={
               <View style={styles.headerStack}>
+                {/* -- PENDING section (Phase 11 B3) — ABOVE the queue ---------- */}
+                {queue.pending.length > 0 ? (
+                  <GlassCard padded style={styles.card}>
+                    <Text style={styles.pendingSectionTitle}>
+                      Awaiting confirmation ({queue.pending.length})
+                    </Text>
+                    {queue.pending.map((item, index) => (
+                      <AnimatedEntrance key={item.id} index={index}>
+                        <PendingRow
+                          appointment={item}
+                          onConfirm={() => void onConfirmPending(item)}
+                          onReject={() => openReject(item)}
+                        />
+                      </AnimatedEntrance>
+                    ))}
+                  </GlassCard>
+                ) : null}
                 {/* -- identity + availability ---------------------------------- */}
                 <GlassCard padded style={styles.card}>
                   <View style={styles.identityRow}>
@@ -604,8 +676,104 @@ export default function StaffTodayScreen() {
         )}
       </GlassModal>
 
+      {/* -- reject pending booking (Phase 11 B3) -------------------------------- */}
+      <GlassModal
+        visible={rejectTarget !== null}
+        title="Reject this booking?"
+        dismissable={!rejecting}
+        onClose={() => setRejectTarget(null)}
+      >
+        {rejectTarget ? (
+          <>
+            <Text style={styles.confirmText}>
+              Serial #{rejectTarget.queueNumber} · {rejectTarget.patientName} will be cancelled and
+              the patient notified. The serial stays consumed (never reused).
+            </Text>
+            <GlassTextField
+              label="Note (optional)"
+              icon="document-text-outline"
+              value={rejectNote}
+              onChangeText={setRejectNote}
+              error={rejectNote.trim().length > 2000 ? 'Note is too long (max 2000)' : null}
+              placeholder="Why is this booking rejected? Saved to the patient record."
+              multiline
+            />
+            {rejectError ? <ErrorBanner message={rejectError} /> : null}
+            <View style={styles.confirmButtons}>
+              <PrimaryButton
+                label="Yes, reject"
+                icon="close-circle-outline"
+                tone="destructive"
+                loading={rejecting}
+                disabled={rejectNote.trim().length > 2000}
+                onPress={() => void doReject()}
+              />
+              <GlassButton
+                label="Keep it pending"
+                disabled={rejecting}
+                onPress={() => setRejectTarget(null)}
+              />
+            </View>
+          </>
+        ) : null}
+      </GlassModal>
+
       <GlassToast toast={toast} />
     </GlassScreen>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Pending row (Phase 11 B3) — the manual-confirmation inbox
+// ---------------------------------------------------------------------------
+
+function PendingRow({
+  appointment,
+  onConfirm,
+  onReject,
+}: {
+  appointment: StaffQueueAppointment;
+  onConfirm: () => void;
+  onReject: () => void;
+}) {
+  const bookedAt = istTimeOfISO(appointment.createdAt);
+  return (
+    <GlassCard nested style={styles.pendingRow}>
+      <View style={styles.rowTop}>
+        <View style={styles.tokenCircle}>
+          <Text style={styles.tokenNum}>#{appointment.queueNumber}</Text>
+        </View>
+        <View style={styles.rowIdentity}>
+          <View style={styles.nameRow}>
+            <Text style={styles.patientName} numberOfLines={1}>
+              {appointment.patientName}
+            </Text>
+          </View>
+          <Text style={styles.patientPhone}>{appointment.patientPhone}</Text>
+        </View>
+        <StatusChip status="PENDING" />
+      </View>
+      <View style={styles.metaRow}>
+        <Text style={styles.metaText}>
+          Booked {bookedAt ? `${bookedAt} IST` : 'earlier'} · awaiting confirmation
+        </Text>
+      </View>
+      <View style={styles.rowActions}>
+        <PrimaryButton
+          label="Confirm"
+          icon="checkmark-circle-outline"
+          onPress={onConfirm}
+          style={styles.pendingConfirmBtn}
+        />
+        <GlassButton
+          label="Reject"
+          icon="close-circle-outline"
+          tone="destructive"
+          onPress={onReject}
+          style={styles.rowBtn}
+        />
+      </View>
+    </GlassCard>
   );
 }
 
@@ -740,6 +908,8 @@ function SourceChip() {
 
 function labelForStatus(status: SettableStatus): string {
   switch (status) {
+    case 'CONFIRMED':
+      return 'Confirmed';
     case 'CALLED':
       return 'Called';
     case 'COMPLETED':
@@ -857,6 +1027,14 @@ const styles = StyleSheet.create({
   // confirm modal
   confirmText: { ...typography.body, color: colors.text.secondary, textAlign: 'center' },
   confirmButtons: { gap: spacing.sm },
+
+  // pending section (Phase 11 B3)
+  pendingSectionTitle: {
+    ...typography.h3,
+    color: colors.status.PENDING.fg,
+  },
+  pendingRow: { gap: spacing.sm },
+  pendingConfirmBtn: { flex: 1 },
 
   // walk-in modal
   walkInDate: { ...typography.caption, color: colors.text.secondary, textAlign: 'center' },

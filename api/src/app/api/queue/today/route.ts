@@ -15,6 +15,11 @@ export const dynamic = 'force-dynamic';
  * Returns the scoped doctor's appointments for that date ordered by
  * queueNumber, with full patient name/phone (masking only exists on the
  * PUBLIC queue endpoint — Phase 3) and estWaitMin per the exact formula.
+ *
+ * Phase 11 B2: PENDING rows are part of `appointments` (status: 'PENDING')
+ * and `counts.pending` — the mobile Today console renders them as their own
+ * PENDING section at the TOP, above the confirmed queue. No separate field:
+ * the row set is the single source, the client partitions by status.
  */
 export const GET = handle(async (request: Request): Promise<Response> => {
   const user = await requireStaffOrAdmin(request);

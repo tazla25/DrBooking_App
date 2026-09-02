@@ -11,6 +11,8 @@ export const dynamic = 'force-dynamic';
  *  a) lowest-queueNumber CALLED appointment today → COMPLETED (may be none);
  *  b) lowest-queueNumber CONFIRMED appointment today → CALLED (may be none).
  * Strictly scoped by scope.doctorId; "today" always from istTodayISO().
+ * PENDING appointments are NEVER auto-called (Phase 11 B2: staff must confirm
+ * them manually first — a pending serial cannot jump into the live queue).
  *
  * Push trigger (b) — AFTER the transaction commits, fire-and-forget: the
  * CONFIRMED patient now at position 3 of the remaining waiting line (the 3rd

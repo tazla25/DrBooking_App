@@ -11,7 +11,9 @@ export const dynamic = 'force-dynamic';
 /**
  * GET /api/appointments/mine  (#9, PATIENT) — the caller's own appointments.
  *
- *  - range=upcoming (default): date >= today AND status ∈ {CONFIRMED, CALLED},
+ *  - range=upcoming (default): date >= today AND status ∈
+ *    {PENDING, CONFIRMED, CALLED} (ACTIVE_STATUSES — Phase 11 B2: a PENDING
+ *    booking is the patient's live "waiting for confirmation" row),
  *    ordered date asc, queueNumber asc. estWaitMin is included per item.
  *  - range=past: (status ∈ {COMPLETED, CANCELLED, NO_SHOW}) OR date < today,
  *    ordered date desc, queueNumber desc. No estWaitMin.

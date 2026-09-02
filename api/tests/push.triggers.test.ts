@@ -17,11 +17,15 @@ import {
 } from './helpers';
 
 /**
- * The three wired push triggers (fire-and-forget AFTER commit):
- *   (a) patient booking      → "Booking confirmed, token #N"
+ * The wired push triggers (fire-and-forget AFTER commit):
+ *   (a) patient booking      → "Booking received — token #N, awaiting clinic
+ *                              confirmation" (Phase 11 B2: PENDING-aware copy;
+ *                              data.type stays BOOKING_CONFIRMED — frozen)
  *   (b) POST /api/queue/next → the CONFIRMED patient now at position 3 of the
  *                              remaining waiting line → "You're 3rd in queue"
  *   (c) staff set CANCELLED  → patient notified
+ *   (d) staff PENDING→CONFIRMED (Phase 11 B2) → "Appointment confirmed",
+ *                              Serial #N + IST date, APPOINTMENT_CONFIRMED
  *
  * notifyUser is spied (and stubbed) at the module boundary — it is exactly
  * what the routes call — so no network ever happens.
@@ -53,7 +57,7 @@ describe('Push triggers wiring', () => {
     notifySpy.mockRestore();
   });
 
-  it('(a) booking confirmed → patient gets "Booking confirmed, token #N"', async () => {
+  it('(a) booking received → patient gets "Booking received — token #N, awaiting clinic confirmation"', async () => {
     const res = await readResponse(
       await bookingRoute(
         postRequest(`${API}/api/appointments`, { scheduleId: schedule.id, date: today }, patient.token),
@@ -64,15 +68,17 @@ describe('Push triggers wiring', () => {
     expect(notifySpy).toHaveBeenCalledTimes(1);
     const [userId, message] = notifySpy.mock.calls[0] as [string, pushModule.PushMessage];
     expect(userId).toBe(patient.userId);
-    expect(message.title).toBe('Booking confirmed');
-    expect(message.body).toBe('Booking confirmed, token #1');
+    expect(message.title).toBe('Booking received');
+    expect(message.body).toBe('Booking received — token #1, awaiting clinic confirmation');
     expect(message.data?.type).toBe('BOOKING_CONFIRMED');
     expect(message.data?.queueNumber).toBe('1');
   });
 
   it('(b) queue/next notifies the 3rd remaining CONFIRMED patient only', async () => {
-    // Queue state: #1 CONFIRMED (patient, from (a)) + walk-ins #2..#5 (no accounts).
-    for (let qn = 2; qn <= 5; qn += 1) {
+    // Queue state: #1 PENDING (patient, from (a) — Phase 11: ONLINE books
+    // PENDING and queue/next never auto-calls it) + walk-ins #2..#6 CONFIRMED
+    // (no accounts).
+    for (let qn = 2; qn <= 6; qn += 1) {
       await createAppointmentFixture(schedule.id, doctor.doctorId, {
         date: today,
         queueNumber: qn,
@@ -84,21 +90,22 @@ describe('Push triggers wiring', () => {
     }
     notifySpy.mockClear();
 
-    // Call next: #1 → CALLED. Remaining CONFIRMED: #2, #3, #4, #5.
-    // 3rd in line = #4 → exactly ONE notification (a walk-in, so notifyUser
-    // receives null and would skip silently — the wiring is what is asserted).
+    // Call next: #2 → CALLED (PENDING #1 is skipped by design). Remaining
+    // CONFIRMED: #3, #4, #5, #6. 3rd in line = #5 → exactly ONE notification
+    // (a walk-in, so notifyUser receives null and would skip silently — the
+    // wiring is what is asserted).
     const res = await readResponse(await queueNextRoute(postRequest(`${API}/api/queue/next`, {}, doctor.token)));
     expect(res.status).toBe(200);
 
     const calls = notifySpy.mock.calls as Array<[string | null | undefined, pushModule.PushMessage]>;
     expect(calls).toHaveLength(1);
     const [userId, message] = calls[0];
-    expect(userId).toBeNull(); // walk-in #4 — no patient account
+    expect(userId).toBeNull(); // walk-in #5 — no patient account
     expect(message.body).toBe("You're 3rd in queue");
     expect(message.data?.position).toBe('3');
 
-    // Call next again: #1 → COMPLETED, #2 → CALLED. Remaining CONFIRMED: #3,#4,#5
-    // → 3rd in line is now #5 → still exactly one notification.
+    // Call next again: #2 → COMPLETED, #3 → CALLED. Remaining CONFIRMED:
+    // #4, #5, #6 → 3rd in line is now #6 → still exactly one notification.
     notifySpy.mockClear();
     await readResponse(await queueNextRoute(postRequest(`${API}/api/queue/next`, {}, doctor.token)));
     expect(notifySpy).toHaveBeenCalledTimes(1);
@@ -107,14 +114,15 @@ describe('Push triggers wiring', () => {
 
   it('(b) fewer than 3 remaining CONFIRMED → no position-3 notification at all', async () => {
     await db.appointment.updateMany({
-      where: { scheduleId: schedule.id, date: today, queueNumber: { in: [3, 4, 5] } },
+      where: { scheduleId: schedule.id, date: today, queueNumber: { in: [4, 5, 6] } },
       data: { status: 'CANCELLED' },
     });
     notifySpy.mockClear();
 
     const res = await readResponse(await queueNextRoute(postRequest(`${API}/api/queue/next`, {}, doctor.token)));
     expect(res.status).toBe(200);
-    // Remaining CONFIRMED after this call: none → no 3rd-in-line push.
+    // Remaining CONFIRMED after this call: none → no 3rd-in-line push (the
+    // PENDING #1 is not part of the waiting line either).
     expect(notifySpy).not.toHaveBeenCalled();
   });
 
@@ -181,5 +189,43 @@ describe('Push triggers wiring', () => {
     expect(userId).toBe(patient.userId);
     expect(message.title).toBe('Appointment cancelled');
     expect(message.data?.type).toBe('APPOINTMENT_CANCELLED');
+  });
+
+  it('(d) staff CONFIRM of a PENDING booking → "Appointment confirmed" with Serial + IST date', async () => {
+    // The appointment created by (a) is still PENDING (Phase 11: ONLINE →
+    // PENDING; (a) verified it booked). Confirm it as staff.
+    const pending = await db.appointment.findFirstOrThrow({
+      where: {
+        scheduleId: schedule.id,
+        date: today,
+        patientId: patient.userId,
+        status: 'PENDING',
+      },
+    });
+
+    notifySpy.mockClear();
+    const res = await readResponse(
+      await statusRoute(
+        postRequest(`${API}/api/appointments/${pending.id}/status`, { status: 'CONFIRMED' }, doctor.token),
+        routeContext({ id: pending.id }),
+      ),
+    );
+    expect(res.status).toBe(200);
+    expect(notifySpy).toHaveBeenCalledTimes(1);
+    const [userId, message] = notifySpy.mock.calls[0] as [string, pushModule.PushMessage];
+    expect(userId).toBe(patient.userId);
+    expect(message.title).toBe('Appointment confirmed');
+    // Body carries Serial #N AND the IST date (the route renders 'YYYY-MM-DD'
+    // as 'D Mon YYYY' — mirror it here; TIME LAW: string slicing only).
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    const [y, m, d] = today.split('-');
+    const pretty = `${Number(d)} ${months[Number(m) - 1] ?? m} ${y}`;
+    expect(message.body).toBe(`Serial #${pending.queueNumber} confirmed for ${pretty}`);
+    expect(message.data?.type).toBe('APPOINTMENT_CONFIRMED');
+    expect(message.data?.appointmentId).toBe(pending.id);
+    expect(message.data?.queueNumber).toBe(String(pending.queueNumber));
   });
 });

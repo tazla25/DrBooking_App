@@ -1,5 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { fetchTodayQueue, type TodayQueueResponse } from '@/lib/staff';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  fetchTodayQueue,
+  confirmAppointment,
+  rejectAppointment,
+  type StaffQueueAppointment,
+  type TodayQueueResponse,
+} from '@/lib/staff';
 import { toFriendlyMessage } from '@/lib/errors';
 
 /**
@@ -14,6 +20,32 @@ interface QueueState {
   refreshing: boolean;
 }
 
+/** Symmetric count adjust: -1 when `status` is left, +1 when it is entered. */
+function adjustCount(count: number, from: string, to: string, status: string): number {
+  return Math.max(0, count + (to === status ? 1 : 0) - (from === status ? 1 : 0));
+}
+
+/** Status flip helpers for the optimistic confirm (and its rollback). */
+function withAppointmentStatus(
+  data: TodayQueueResponse,
+  id: string,
+  from: string,
+  to: string,
+): TodayQueueResponse {
+  const matches = (a: StaffQueueAppointment) => a.id === id && a.status === from;
+  const changed = data.appointments.some(matches);
+  if (!changed) return data; // stale/foreign row — leave untouched
+  return {
+    ...data,
+    appointments: data.appointments.map((a) => (matches(a) ? { ...a, status: to } : a)),
+    counts: {
+      ...data.counts,
+      pending: adjustCount(data.counts.pending, from, to, 'PENDING'),
+      confirmed: adjustCount(data.counts.confirmed, from, to, 'CONFIRMED'),
+    },
+  };
+}
+
 /**
  * The staff "Today" queue with 15s focus-polling — same architecture as the
  * patient useLiveQueue hook (Phase 6), parameterized by business DATE:
@@ -26,6 +58,16 @@ interface QueueState {
  *    next successful poll clears it;
  *  - `refresh()` serves pull-to-refresh AND refetch-after-mutation (every
  *    queue mutation on the Today tab calls it).
+ *
+ * Phase 11 B3 — manual confirmation actions on the PENDING section:
+ *  - `confirmPending(id)`: single-tap CONFIRM with an OPTIMISTIC status flip
+ *    (row moves out of the pending section instantly) and a full ROLLBACK on
+ *    failure; a background refresh re-syncs counts/estWait after success.
+ *  - `rejectPending(id, note?)`: destructive — never optimistic; CANCELLED
+ *    via the existing status route, the optional note persisted as a patient
+ *    note (best-effort, never rolls the rejection back).
+ *  - `pending`: the derived PENDING rows (top section of the console).
+ *  Both return a friendly error message (null on success) for the toast.
  *
  * TIME LAW: `date` is a verbatim 'YYYY-MM-DD' IST string — never converted.
  * Rule-safe updates: no synchronous setState inside effect bodies.
@@ -97,7 +139,64 @@ export function useTodayQueue(date: string, active: boolean) {
     }
   }, [date]);
 
+  /**
+   * CONFIRM a PENDING booking (PENDING → CONFIRMED). Optimistic: the row
+   * flips instantly and the counts move; on failure everything rolls back
+   * exactly and the friendly error is returned for the toast. After success
+   * a background refresh re-syncs server truth (estWait, ordering).
+   */
+  const confirmPending = useCallback(
+    async (id: string): Promise<string | null> => {
+      setState((s) =>
+        s.data ? { ...s, data: withAppointmentStatus(s.data, id, 'PENDING', 'CONFIRMED') } : s,
+      );
+      try {
+        await confirmAppointment(id);
+        void refresh(); // re-sync counts + estWaitMin after the server commit
+        return null;
+      } catch (err) {
+        setState((s) =>
+          s.data ? { ...s, data: withAppointmentStatus(s.data, id, 'CONFIRMED', 'PENDING') } : s,
+        );
+        return toFriendlyMessage(err);
+      }
+    },
+    [refresh],
+  );
+
+  /**
+   * REJECT a PENDING booking (PENDING → CANCELLED) — destructive, so NOT
+   * optimistic; the optional note is persisted as a patient note after the
+   * cancellation commits (best-effort — a note failure surfaces as a warning
+   * message but the rejection stands). The caller then refreshes via the
+   * returned outcome (refresh runs here in both cases).
+   */
+  const rejectPending = useCallback(
+    async (
+      id: string,
+      note?: string,
+    ): Promise<{ error: string | null; noteWarning: string | null }> => {
+      const phone = state.data?.appointments.find((a) => a.id === id)?.patientPhone ?? '';
+      const trimmedNote = note?.trim(); // blank → omitted (never an empty note)
+      try {
+        const result = await rejectAppointment(id, phone, trimmedNote || undefined);
+        await refresh();
+        return { error: null, noteWarning: result.noteWarning };
+      } catch (err) {
+        return { error: toFriendlyMessage(err), noteWarning: null };
+      }
+    },
+    [refresh, state.data],
+  );
+
   const stale = state.data !== null && state.loadedFor !== date;
+
+  /** PENDING rows for the manual-confirmation section (top of the console). */
+  const pending = useMemo(
+    () =>
+      stale || !state.data ? [] : state.data.appointments.filter((a) => a.status === 'PENDING'),
+    [state.data, stale],
+  );
 
   return {
     data: stale ? null : state.data,
@@ -106,5 +205,9 @@ export function useTodayQueue(date: string, active: boolean) {
     error: state.message,
     refreshing: state.refreshing,
     refresh,
+    /** Phase 11 B3: the pending section + its actions. */
+    pending,
+    confirmPending,
+    rejectPending,
   };
 }

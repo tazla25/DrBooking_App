@@ -34,14 +34,31 @@ export interface RegisterResponse {
 
 export interface MeResponse {
   user: SafeUser;
-  doctorProfile: { id: string; fullName: string; specialization: string | null } | null;
+  /**
+   * Phase 11 (A3, additive): the profile-edit fields hydrate the doctor's
+   * edit form from ONE call. Same values publicDoctorView exposes — nothing
+   * secret. Null for patients / staff without a linked doctor.
+   */
+  doctorProfile: {
+    id: string;
+    fullName: string;
+    specialization: string | null;
+    fee: number | null;
+    yearsExperience: number | null;
+    bio: string | null;
+    registrationNumber: string | null;
+    avatarUrl: string | null;
+  } | null;
 }
 
-/** Public doctor card (GET /api/doctors → data.doctors[]). */
+/** Public doctor card (GET /api/doctors → data.doctors[]).
+ * Phase 11 (A3, additive): registrationNumber + avatarUrl (null when unset). */
 export interface DoctorSummary {
   id: string;
   fullName: string;
   specialization: string | null;
+  registrationNumber: string | null;
+  avatarUrl: string | null;
   fee: number | null;
   yearsExperience: number | null;
   bio?: string;

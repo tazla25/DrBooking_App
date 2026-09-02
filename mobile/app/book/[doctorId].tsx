@@ -164,7 +164,7 @@ export default function BookingScreen() {
               {/* -- doctor strip ------------------------------------------------ */}
               <GlassCard padded style={styles.card}>
                 <View style={styles.identityRow}>
-                  <Avatar name={doctor.fullName} size={52} />
+                  <Avatar name={doctor.fullName} size={52} uri={doctor.avatarUrl} />
                   <View style={styles.identity}>
                     <Text style={styles.name} numberOfLines={1}>
                       {doctor.fullName}
@@ -172,6 +172,11 @@ export default function BookingScreen() {
                     <Text style={styles.spec} numberOfLines={1}>
                       {doctor.specialization ?? 'General practice'}
                     </Text>
+                    {doctor.registrationNumber ? (
+                      <Text style={styles.regNo} numberOfLines={1}>
+                        Reg. {doctor.registrationNumber}
+                      </Text>
+                    ) : null}
                   </View>
                   <Text style={styles.fee}>{formatFee(doctor.fee)}</Text>
                 </View>
@@ -452,6 +457,8 @@ const styles = StyleSheet.create({
   identity: { flex: 1, gap: 2 },
   name: { ...typography.h3, color: colors.text.primary },
   spec: { ...typography.caption, color: colors.text.secondary },
+  // Registration number (Phase 11 A5) — rendered ONLY when set, never "N/A".
+  regNo: { ...typography.micro, color: colors.status.CONFIRMED.fg, letterSpacing: 0.3 },
   fee: { ...typography.h3, color: colors.text.primary },
   sectionTitle: {
     flexDirection: 'row',

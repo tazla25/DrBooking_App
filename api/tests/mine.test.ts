@@ -1,4 +1,5 @@
 import { GET as getMine } from '@/app/api/appointments/mine/route';
+import { db } from '@/lib/db';
 import { istTodayISO, addDaysISO, dayOfWeekIST } from '@/lib/time';
 import {
   getRequest,
@@ -118,7 +119,7 @@ describe('GET /api/appointments/mine (#9)', () => {
     return getMine(getRequest(`${API}/api/appointments/mine${query}`, token));
   }
 
-  it('upcoming (default): only CONFIRMED/CALLED from today onward, queue order, estWaitMin', async () => {
+  it('upcoming (default): only PENDING/CONFIRMED/CALLED from today onward, queue order, estWaitMin', async () => {
     const body = await readResponse(await mine());
     expect(body.status).toBe(200);
 
@@ -139,6 +140,33 @@ describe('GET /api/appointments/mine (#9)', () => {
     expect(q2.doctor.fullName).toBe('Dr Mine');
     expect(q2.schedule.clinicName).toBe('City Clinic');
     expect(q2.fee).toBe(null);
+  });
+
+  it('a PENDING booking appears in upcoming (Phase 11 B2 — the live "waiting for confirmation" row)', async () => {
+    // A fresh patient books ONLINE — booking writes PENDING now.
+    const pendingPatient = await createPatientFixture({ phone: '9821000030', name: 'Pending Patient' });
+    const pendingAppt = await createAppointmentFixture(schedule.id, doctor.doctorId, {
+      date: today,
+      queueNumber: 20,
+      status: 'PENDING',
+      source: 'ONLINE',
+      patientId: pendingPatient.userId,
+      patientName: 'Pending Patient',
+      patientPhone: '+919821000030',
+    });
+
+    const body = await readResponse(
+      await getMine(getRequest(`${API}/api/appointments/mine`, pendingPatient.token)),
+    );
+    expect(body.status).toBe(200);
+    const data = body.data as { total: number; appointments: MineItem[] };
+    expect(data.total).toBe(1);
+    expect(data.appointments[0].status).toBe('PENDING');
+    expect(data.appointments[0].queueNumber).toBe(20);
+    expect(data.appointments[0].estWaitMin).toBe(45); // queue 1+2+3 (CONFIRMED/CONFIRMED/CALLED) ahead × 15 min
+
+    // Cleanup so later/earlier totals stay honest for reruns within this file.
+    await db.appointment.delete({ where: { id: pendingAppt.id } });
   });
 
   it('past: terminal statuses OR past dates, newest first, no estWaitMin', async () => {

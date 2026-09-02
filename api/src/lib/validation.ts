@@ -21,6 +21,7 @@ export type Role = (typeof ROLES)[number];
 export const VERIFICATION_STATUSES = ['PENDING', 'VERIFIED', 'REJECTED'] as const;
 
 export const APPOINTMENT_STATUSES = [
+  'PENDING',
   'CONFIRMED',
   'CALLED',
   'COMPLETED',
@@ -129,10 +130,21 @@ export const dateSchema = z.string().refine(validateDateStr, 'Invalid date (expe
 /** IST business time 'HH:mm' (00:00–23:59). */
 export const timeSchema = z.string().refine(validateTimeHM, 'Invalid time (expected HH:mm)');
 
-/** Statuses a staff member may SET on an appointment (CONFIRMED is book-only). */
-export const settableStatusEnum = z.enum(['CALLED', 'COMPLETED', 'CANCELLED', 'NO_SHOW'], {
-  message: 'Status must be one of CALLED, COMPLETED, CANCELLED, NO_SHOW',
-});
+/**
+ * Statuses a staff member may SET on an appointment (schema-level). Phase 11:
+ * CONFIRMED is now staff-settable — that IS the manual confirm action
+ * (PENDING → CONFIRMED). PENDING is schema-accepted so that attempts to move
+ * anything TO PENDING fail with the EXPLICIT 409 INVALID_TRANSITION from the
+ * ALLOWED_TRANSITIONS map (per the Phase 11 spec) instead of a 422 — no
+ * allowed transition ever lands on PENDING, so it stays unreachable in
+ * practice (booking is the only writer of PENDING).
+ */
+export const settableStatusEnum = z.enum(
+  ['PENDING', 'CONFIRMED', 'CALLED', 'COMPLETED', 'CANCELLED', 'NO_SHOW'],
+  {
+    message: 'Status must be one of PENDING, CONFIRMED, CALLED, COMPLETED, CANCELLED, NO_SHOW',
+  },
+);
 
 // GET /api/queue/today — ?date & ?doctorId (doctorId honored for SUPER_ADMIN only)
 export const queueTodayQuerySchema = z.object({
@@ -283,6 +295,59 @@ export const deviceTokenSchema = z.object({
   token: z.string().trim().min(10, 'Device token is too short').max(512, 'Device token is too long'),
   platform: z.enum(['ios', 'android'], { message: "platform must be 'ios' or 'android'" }),
 });
+
+// -- Phase 11 A2: doctor self-service profile (PATCH /api/doctors/me) --------
+
+/**
+ * Data-URL avatar rule: exactly 'data:image/jpeg;base64,…' or
+ * 'data:image/png;base64,…' (hard cap 300,000 chars). BOTH rules are enforced
+ * in the route (not zod) so they can return 400 AVATAR_TOO_LARGE /
+ * 400 AVATAR_INVALID instead of a generic 422.
+ */
+export const AVATAR_MAX_CHARS = 300_000;
+export const AVATAR_DATA_URL_RE = /^data:image\/(jpeg|png);base64,[A-Za-z0-9+/=]*$/;
+
+/** Registration numbers: letters/digits/hyphen/dot/slash/space, 3-40 chars.
+ * Exported for the route (and its tests) — the ROUTE returns 400 on violations. */
+export const REGISTRATION_NUMBER_RE = /^[A-Za-z0-9\-./ ]+$/;
+export const REGISTRATION_NUMBER_MIN = 3;
+export const REGISTRATION_NUMBER_MAX = 40;
+
+/**
+ * PATCH /api/doctors/me — every field optional, at least one required,
+ * unknown keys REJECTED (.strict()). null clears the two optional identity
+ * fields (registrationNumber/avatarUrl). The registrationNumber and avatarUrl
+ * VALUE rules (charset, length, data-URL form, 300k cap) are enforced in the
+ * ROUTE (not zod) so they return 400 REGISTRATION_NUMBER_INVALID /
+ * 400 AVATAR_TOO_LARGE / 400 AVATAR_INVALID instead of a generic 422 —
+ * every invalid value of those two fields gets ONE consistent code.
+ */
+export const doctorProfilePatchSchema = z
+  .object({
+    specialization: z.string().trim().max(120, 'Specialization is too long (max 120)').optional(),
+    fee: z
+      .number()
+      .int('Fee must be an integer')
+      .min(0, 'Fee must be >= 0')
+      .max(100_000, 'Fee is too large (max 100000)')
+      .optional(),
+    yearsExperience: z
+      .number()
+      .int('Years of experience must be an integer')
+      .min(0, 'Years of experience must be between 0 and 80')
+      .max(80, 'Years of experience must be between 0 and 80')
+      .optional(),
+    bio: z.string().max(1000, 'Bio is too long (max 1000)').optional(),
+    registrationNumber: z.string().trim().nullable().optional(),
+    avatarUrl: z.string().nullable().optional(),
+  })
+  .strict()
+  .refine(
+    (v) => Object.values(v).some((value) => value !== undefined),
+    { message: 'Provide at least one field to update' },
+  );
+
+export type DoctorProfilePatchInput = z.infer<typeof doctorProfilePatchSchema>;
 
 // -- Phase 4: admin, analytics, export, rate limiting (contracts #26–31) ---------
 

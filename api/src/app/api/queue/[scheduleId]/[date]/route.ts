@@ -22,6 +22,10 @@ type RouteContext = { params: Promise<{ scheduleId: string; date: string }> };
  *  - `my` is non-null only when a valid Bearer token belongs to a PATIENT
  *    with an appointment in THIS queue; anonymous/invalid/staff tokens →
  *    my: null (never an error — the screen stays public).
+ *  - Phase 11 B2: PENDING rows are INCLUDED — masked, in their own `pending`
+ *    list + a pending count (the public screen renders them with a pending
+ *    chip). They are NOT part of `upNext` (only confirmed patients are up
+ *    next) and the current CALLED row is unaffected.
  */
 export const GET = handle(async (request: Request, context: RouteContext): Promise<Response> => {
   const raw = await context.params;
@@ -61,10 +65,19 @@ export const GET = handle(async (request: Request, context: RouteContext): Promi
     estWaitMin: v.estWaitMin,
   }));
 
+  // Phase 11 B2: pending (manual-confirmation) rows — masked, queue order,
+  // NOT in upNext. Serials are visible so patients can see the queue shape.
+  const pendingViews = views.filter((v) => v.status === 'PENDING');
+  const pending = pendingViews.map((v) => ({
+    queueNumber: v.queueNumber,
+    patientName: maskPatientName(v.patientName),
+  }));
+
   const counts = {
     completed: views.filter((v) => v.status === 'COMPLETED').length,
     called: calledViews.length,
     waiting: confirmedViews.length,
+    pending: pendingViews.length,
   };
 
   // Optional identity: never throws — an anonymous or invalid token simply
@@ -74,10 +87,11 @@ export const GET = handle(async (request: Request, context: RouteContext): Promi
   if (user && user.role === 'PATIENT') {
     const mine = appointments.filter((a) => a.patientId === user.id);
     if (mine.length > 0) {
-      // Prefer the caller's ACTIVE booking (lowest queue number); otherwise
-      // show their most recent one (e.g. already cancelled today).
+      // Prefer the caller's ACTIVE booking (PENDING|CONFIRMED|CALLED — a
+      // pending booking is the patient's live booking, Phase 11 B2); lowest
+      // queue number first, else their most recent one (e.g. cancelled today).
       const active = mine
-        .filter((a) => a.status === 'CONFIRMED' || a.status === 'CALLED')
+        .filter((a) => a.status === 'PENDING' || a.status === 'CONFIRMED' || a.status === 'CALLED')
         .sort((a, b) => a.queueNumber - b.queueNumber);
       const chosen = active[0] ?? mine.sort((a, b) => b.queueNumber - a.queueNumber)[0];
       const view: StaffAppointmentView | undefined = views.find((v) => v.id === chosen.id);
@@ -105,6 +119,7 @@ export const GET = handle(async (request: Request, context: RouteContext): Promi
     },
     current,
     upNext,
+    pending,
     counts,
     my,
   });

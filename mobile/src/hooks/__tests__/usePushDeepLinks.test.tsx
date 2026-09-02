@@ -69,10 +69,12 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 
 describe('deepLinkRouteFor', () => {
-  test('all three frozen payload types route to the patient appointments tab', () => {
+  test('all frozen payload types route to the patient appointments tab', () => {
     expect(deepLinkRouteFor('BOOKING_CONFIRMED')).toBe('/(tabs)/appointments');
     expect(deepLinkRouteFor('QUEUE_POSITION')).toBe('/(tabs)/appointments');
     expect(deepLinkRouteFor('APPOINTMENT_CANCELLED')).toBe('/(tabs)/appointments');
+    // Phase 11 B4: the manual-confirmation push routes the same way.
+    expect(deepLinkRouteFor('APPOINTMENT_CONFIRMED')).toBe('/(tabs)/appointments');
   });
 
   test('unknown type is a no-op', () => {
@@ -101,6 +103,24 @@ describe('usePushDeepLinks', () => {
 
     expect(router.push).toHaveBeenCalledTimes(1);
     expect(router.push).toHaveBeenCalledWith('/(tabs)/appointments');
+  });
+
+  test('patient taps APPOINTMENT_CONFIRMED (Phase 11 B4) → appointments tab (and CANCELLED still works)', async () => {
+    const router = useRouter() as unknown as { push: jest.Mock };
+    await renderHook(() => usePushDeepLinks());
+
+    await act(async () => {
+      fireListener(responseOf('n-confirm', 'APPOINTMENT_CONFIRMED'));
+    });
+    expect(router.push).toHaveBeenCalledTimes(1);
+    expect(router.push).toHaveBeenCalledWith('/(tabs)/appointments');
+
+    // The existing CANCELLED link still routes after the Phase 11 change.
+    await act(async () => {
+      fireListener(responseOf('n-cancel', 'APPOINTMENT_CANCELLED'));
+    });
+    expect(router.push).toHaveBeenCalledTimes(2);
+    expect(router.push).toHaveBeenLastCalledWith('/(tabs)/appointments');
   });
 
   test('double-fire (listener + last-response, same id) navigates exactly once', async () => {

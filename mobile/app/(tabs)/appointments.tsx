@@ -330,6 +330,7 @@ function AppointmentCard({
   onLiveQueue: () => void;
   onRate: () => void;
 }) {
+  const isPending = appointment.status === 'PENDING';
   const isConfirmed = appointment.status === 'CONFIRMED';
   const canRate = range === 'past' && appointment.status === 'COMPLETED' && !rated;
 
@@ -351,7 +352,7 @@ function AppointmentCard({
             </Text>
           ) : null}
         </View>
-        {range === 'upcoming' && typeof appointment.estWaitMin === 'number' ? (
+        {range === 'upcoming' && typeof appointment.estWaitMin === 'number' && !isPending ? (
           <View style={styles.waitPill}>
             <Ionicons name="time-outline" size={13} color={colors.text.secondary} />
             <Text style={styles.waitText}>
@@ -369,6 +370,15 @@ function AppointmentCard({
         {appointment.schedule.endTime}
       </Text>
 
+      {isPending ? (
+        <View style={styles.pendingRow}>
+          <Ionicons name="hourglass-outline" size={14} color={colors.status.PENDING.fg} />
+          <Text style={styles.pendingText}>
+            Waiting for confirmation — Serial #{appointment.queueNumber} is reserved
+          </Text>
+        </View>
+      ) : null}
+
       {range === 'upcoming' ? (
         <View style={styles.actions}>
           <GlassButton
@@ -378,7 +388,7 @@ function AppointmentCard({
             disabled={resolvingQueue}
             style={styles.actionButton}
           />
-          {isConfirmed ? (
+          {isConfirmed || isPending ? (
             <GlassButton
               label={resolvingQueue ? 'Opening…' : 'Cancel'}
               icon="close-circle-outline"
@@ -459,6 +469,20 @@ const styles = StyleSheet.create({
   waitText: { ...typography.caption, color: colors.text.secondary },
   clinic: { ...typography.bodySemi, color: colors.text.primary },
   meta: { ...typography.caption, color: colors.text.secondary },
+  // Pending state (Phase 11 B4) — distinct from confirmed.
+  pendingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: 'rgba(245, 166, 35, 0.14)',
+    borderRadius: radii.chip,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 166, 35, 0.35)',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    alignSelf: 'flex-start',
+  },
+  pendingText: { ...typography.captionSemi, color: colors.status.PENDING.fg },
   actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
   actionButton: { flex: 1, minHeight: 44 },
   ratedRow: {

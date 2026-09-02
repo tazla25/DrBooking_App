@@ -66,7 +66,8 @@ export const GET = handle(async (request: Request, context: RouteContext): Promi
     schedule: publicScheduleView(schedule),
     // The queue number the NEXT booking would get (cancelled numbers stay taken).
     nextQueue: stats.nextQueueNumber,
-    // Everyone currently CONFIRMED/CALLED would be ahead of a new booking.
+    // Everyone currently PENDING|CONFIRMED|CALLED would be ahead of a new
+    // booking (Phase 11 B2: pending serials hold their place).
     estWaitMin: stats.activeCount * schedule.avgMinutesPerPatient,
     capacityLeft: stats.capacityLeft,
     avgMinutesPerPatient: schedule.avgMinutesPerPatient,

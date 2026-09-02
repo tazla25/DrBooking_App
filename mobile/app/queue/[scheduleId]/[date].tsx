@@ -16,7 +16,7 @@ import { hapticSuccess } from '@/lib/haptics';
 import { useLiveQueue } from '@/hooks/useLiveQueue';
 import { colors, radii, spacing, typography } from '@/theme';
 import type { AppointmentStatus } from '@/components';
-import type { LiveQueueUpNext } from '@/lib/appointments';
+import type { LiveQueuePending, LiveQueueUpNext } from '@/lib/appointments';
 
 /**
  * Live queue (public, masked) — auto-refreshes every 15s while focused and
@@ -24,6 +24,10 @@ import type { LiveQueueUpNext } from '@/lib/appointments';
  * immediate update. When the caller is a PATIENT booked in this queue, their
  * row is highlighted with an accent border + "You" badge; anonymous visitors
  * see the identical screen minus that row (`my: null` never errors).
+ *
+ * Phase 11 B2: PENDING rows render as their own "Awaiting confirmation"
+ * section (masked, pending chip, serials visible) — they are NOT in up next;
+ * counts gains a Pending pill. A PENDING "You" row shows the waiting state.
  */
 export default function LiveQueueScreen() {
   const { scheduleId, date } = useLocalSearchParams<{ scheduleId: string; date: string }>();
@@ -141,13 +145,15 @@ export default function LiveQueueScreen() {
                     <View style={styles.myRow}>
                       <Text style={styles.myToken}>#{data.my.queueNumber}</Text>
                       <Text style={styles.myWait}>
-                        {data.my.status === 'COMPLETED'
-                          ? 'Visit completed'
-                          : data.my.status === 'CALLED'
-                            ? 'It is your turn — go to the desk'
-                            : data.my.estWaitMin > 0
-                              ? `~${data.my.estWaitMin} min to go`
-                              : 'You are next'}
+                        {data.my.status === 'PENDING'
+                          ? 'Waiting for confirmation — your serial is reserved'
+                          : data.my.status === 'COMPLETED'
+                            ? 'Visit completed'
+                            : data.my.status === 'CALLED'
+                              ? 'It is your turn — go to the desk'
+                              : data.my.estWaitMin > 0
+                                ? `~${data.my.estWaitMin} min to go`
+                                : 'You are next'}
                       </Text>
                     </View>
                   </GlassCard>
@@ -162,7 +168,29 @@ export default function LiveQueueScreen() {
                   />
                   <CountPill icon="megaphone-outline" label="Called" value={data.counts.called} />
                   <CountPill icon="hourglass-outline" label="Waiting" value={data.counts.waiting} />
+                  <CountPill
+                    icon="help-circle-outline"
+                    label="Pending"
+                    value={data.counts.pending}
+                  />
                 </View>
+
+                {/* -- awaiting confirmation (Phase 11 B2) -------------------------- */}
+                {data.pending.length > 0 ? (
+                  <View style={styles.pendingSection}>
+                    <View style={styles.upNextTitleRow}>
+                      <Ionicons name="hourglass-outline" size={15} color={colors.text.secondary} />
+                      <Text style={styles.upNextTitle}>Awaiting confirmation</Text>
+                    </View>
+                    {data.pending.map((item) => (
+                      <PendingRow key={item.queueNumber} item={item} />
+                    ))}
+                    <Text style={styles.pendingHint}>
+                      These bookings wait for the clinic to confirm — their serials are already
+                      reserved and never change.
+                    </Text>
+                  </View>
+                ) : null}
 
                 <View style={styles.upNextTitleRow}>
                   <Ionicons name="list-outline" size={15} color={colors.text.secondary} />
@@ -209,6 +237,19 @@ function UpNextRow({
         {item.patientName}
       </Text>
       <Text style={styles.upNextWait}>{item.estWaitMin > 0 ? `~${item.estWaitMin}m` : 'next'}</Text>
+    </GlassCard>
+  );
+}
+
+/** One masked PENDING row (Phase 11 B2) — serial + masked name + chip. */
+function PendingRow({ item }: { item: LiveQueuePending }) {
+  return (
+    <GlassCard nested style={[styles.upNextRow, styles.pendingQueueRow]}>
+      <Text style={styles.upNextToken}>#{item.queueNumber}</Text>
+      <Text style={styles.upNextName} numberOfLines={1} ellipsizeMode="tail">
+        {item.patientName}
+      </Text>
+      <StatusChip status="PENDING" />
     </GlassCard>
   );
 }
@@ -301,6 +342,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.md,
     padding: spacing.md,
+  },
+  // Pending section (Phase 11 B2)
+  pendingSection: { gap: spacing.xs },
+  pendingQueueRow: {
+    backgroundColor: 'rgba(245, 166, 35, 0.10)',
+  },
+  pendingHint: {
+    ...typography.micro,
+    color: colors.text.secondary,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+    paddingHorizontal: spacing.sm,
   },
   upNextRowMine: {
     borderWidth: 2,

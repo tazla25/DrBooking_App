@@ -15,10 +15,13 @@ export const dynamic = 'force-dynamic';
  *  - schedule must belong to the caller's scope (else 404 — never reveal
  *    another doctor's resources) and be active;
  *  - date must be today-or-future (IST) and match schedule.dayOfWeek;
- *  - duplicate guard (same phone + schedule + date, CONFIRMED/CALLED) and the
- *    CLOSED-override check run inside the transaction via bookInQueue;
+ *  - duplicate guard (same phone + schedule + date, PENDING|CONFIRMED|CALLED —
+ *    Phase 11 B2) and the CLOSED-override check run inside the transaction
+ *    via bookInQueue;
  *  - queueNumber = max(scheduleId+date) + 1 with P2002/P2034 retries;
- *  - fee defaults to the doctor's DoctorProfile.fee.
+ *  - fee defaults to the doctor's DoctorProfile.fee;
+ *  - status: WALK_IN → CONFIRMED immediately (Phase 11 B1 — desk-created
+ *    bookings skip manual confirmation).
  */
 export const POST = handle(async (request: Request): Promise<Response> => {
   const { user, doctorId } = await requireVerifiedStaffScope(request);
