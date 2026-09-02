@@ -315,29 +315,38 @@ export const REGISTRATION_NUMBER_MAX = 40;
 
 /**
  * PATCH /api/doctors/me — every field optional, at least one required,
- * unknown keys REJECTED (.strict()). null clears the two optional identity
- * fields (registrationNumber/avatarUrl). The registrationNumber and avatarUrl
- * VALUE rules (charset, length, data-URL form, 300k cap) are enforced in the
- * ROUTE (not zod) so they return 400 REGISTRATION_NUMBER_INVALID /
- * 400 AVATAR_TOO_LARGE / 400 AVATAR_INVALID instead of a generic 422 —
- * every invalid value of those two fields gets ONE consistent code.
+ * unknown keys REJECTED (.strict()). null clears ANY editable field —
+ * ALL six are .nullable() (fix1: the mobile app sends null for every blank
+ * field; previously only registrationNumber/avatarUrl accepted it). The
+ * registrationNumber and avatarUrl VALUE rules (charset, length, data-URL
+ * form, 300k cap) are enforced in the ROUTE (not zod) so they return 400
+ * REGISTRATION_NUMBER_INVALID / 400 AVATAR_TOO_LARGE / 400 AVATAR_INVALID
+ * instead of a generic 422 — every invalid value of those two fields gets
+ * ONE consistent code.
  */
 export const doctorProfilePatchSchema = z
   .object({
-    specialization: z.string().trim().max(120, 'Specialization is too long (max 120)').optional(),
+    specialization: z
+      .string()
+      .trim()
+      .max(120, 'Specialization is too long (max 120)')
+      .nullable()
+      .optional(),
     fee: z
       .number()
       .int('Fee must be an integer')
       .min(0, 'Fee must be >= 0')
       .max(100_000, 'Fee is too large (max 100000)')
+      .nullable()
       .optional(),
     yearsExperience: z
       .number()
       .int('Years of experience must be an integer')
       .min(0, 'Years of experience must be between 0 and 80')
       .max(80, 'Years of experience must be between 0 and 80')
+      .nullable()
       .optional(),
-    bio: z.string().max(1000, 'Bio is too long (max 1000)').optional(),
+    bio: z.string().max(1000, 'Bio is too long (max 1000)').nullable().optional(),
     registrationNumber: z.string().trim().nullable().optional(),
     avatarUrl: z.string().nullable().optional(),
   })

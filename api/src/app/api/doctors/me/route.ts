@@ -33,9 +33,11 @@ export const dynamic = 'force-dynamic';
  * PATCH semantics:
  *  - zod validates shapes (doctorProfilePatchSchema: every field optional,
  *    at least one required, unknown keys rejected via .strict());
+ *  - null CLEARS any editable field (fix1: all six are nullable — the
+ *    mobile app sends null for every blank field);
  *  - avatarUrl value rules run HERE so they can carry their own codes:
  *    >300,000 chars → 400 AVATAR_TOO_LARGE; wrong data-URL form →
- *    400 AVATAR_INVALID. null clears (stores NULL).
+ *    400 AVATAR_INVALID.
  *  - the audit row (DOCTOR_PROFILE_UPDATED, target doctor:<id>) records the
  *    JSON list of CHANGED KEYS ONLY — never values, never the avatar itself.
  *  - response = the refreshed publicDoctorView (nothing secret involved).
@@ -108,48 +110,68 @@ export const PATCH = handle(async (request: Request): Promise<Response> => {
     }
   }
 
-  // Changed KEYS only (value comparison — sending an unchanged value is not a
-  // change). bio keeps its only-when-present response convention but compares
-  // with '' so an explicit empty string counts as clearing a stored bio.
+  // Normalize every incoming field to its WRITE VALUE first (fix1: null
+  // means "clear the stored value" for ALL six fields). Text fields also
+  // normalize '' → NULL; numbers pass through; registrationNumber keeps its
+  // '' → NULL rule; avatarUrl values are already route-validated above.
+  const nextSpecialization =
+    patch.specialization === undefined
+      ? undefined
+      : patch.specialization === null || patch.specialization.trim() === ''
+        ? null
+        : patch.specialization.trim();
+  const nextFee = patch.fee === undefined ? undefined : patch.fee;
+  const nextYearsExperience =
+    patch.yearsExperience === undefined ? undefined : patch.yearsExperience;
+  const nextBio =
+    patch.bio === undefined
+      ? undefined
+      : patch.bio === null || patch.bio.trim() === ''
+        ? null
+        : patch.bio.trim();
+  const nextRegistrationNumber =
+    patch.registrationNumber === undefined
+      ? undefined
+      : patch.registrationNumber === null || patch.registrationNumber === ''
+        ? null
+        : patch.registrationNumber;
+  const nextAvatarUrl = patch.avatarUrl;
+
+  // Changed KEYS ONLY — the NORMALIZED write value vs the stored value, so a
+  // no-op resend never records a key (bio compares against profile.bio ??
+  // null; specialization's ''→null normalization happens BEFORE the compare,
+  // so '' over NULL and null over NULL are both no-ops).
   const changedKeys: string[] = [];
-  if (patch.specialization !== undefined && patch.specialization !== profile.specialization) {
+  if (nextSpecialization !== undefined && nextSpecialization !== (profile.specialization ?? null)) {
     changedKeys.push('specialization');
   }
-  if (patch.fee !== undefined && patch.fee !== profile.fee) {
+  if (nextFee !== undefined && nextFee !== (profile.fee ?? null)) {
     changedKeys.push('fee');
   }
-  if (patch.yearsExperience !== undefined && patch.yearsExperience !== profile.yearsExperience) {
+  if (nextYearsExperience !== undefined && nextYearsExperience !== (profile.yearsExperience ?? null)) {
     changedKeys.push('yearsExperience');
   }
-  if (patch.bio !== undefined && patch.bio !== (profile.bio ?? '')) {
+  if (nextBio !== undefined && nextBio !== (profile.bio ?? null)) {
     changedKeys.push('bio');
   }
-  if (
-    patch.registrationNumber !== undefined &&
-    patch.registrationNumber !== profile.registrationNumber
-  ) {
+  if (nextRegistrationNumber !== undefined && nextRegistrationNumber !== profile.registrationNumber) {
     changedKeys.push('registrationNumber');
   }
-  if (patch.avatarUrl !== undefined && patch.avatarUrl !== profile.avatarUrl) {
+  if (nextAvatarUrl !== undefined && nextAvatarUrl !== profile.avatarUrl) {
     changedKeys.push('avatarUrl');
   }
 
-  // Empty-string bio clears the stored value (normalized to NULL on write);
-  // empty-string registrationNumber is rejected by zod min(3) long before here.
+  // Write the normalized values (undefined = field absent from the payload —
+  // untouched). Empty-string text fields clear to NULL here (they were
+  // normalized above); empty-string registrationNumber is rejected by zod
+  // min(3) long before here.
   const data: Record<string, unknown> = {};
-  if (patch.specialization !== undefined) {
-    data.specialization = patch.specialization.trim() === '' ? null : patch.specialization;
-  }
-  if (patch.fee !== undefined) data.fee = patch.fee;
-  if (patch.yearsExperience !== undefined) data.yearsExperience = patch.yearsExperience;
-  if (patch.bio !== undefined) data.bio = patch.bio.trim() === '' ? null : patch.bio;
-  if (patch.registrationNumber !== undefined) {
-    data.registrationNumber =
-      patch.registrationNumber === null || patch.registrationNumber === ''
-        ? null
-        : patch.registrationNumber;
-  }
-  if (patch.avatarUrl !== undefined) data.avatarUrl = patch.avatarUrl;
+  if (nextSpecialization !== undefined) data.specialization = nextSpecialization;
+  if (nextFee !== undefined) data.fee = nextFee;
+  if (nextYearsExperience !== undefined) data.yearsExperience = nextYearsExperience;
+  if (nextBio !== undefined) data.bio = nextBio;
+  if (nextRegistrationNumber !== undefined) data.registrationNumber = nextRegistrationNumber;
+  if (nextAvatarUrl !== undefined) data.avatarUrl = nextAvatarUrl;
 
   const updated = await db.doctorProfile
     .update({ where: { id: profile.id }, data })
