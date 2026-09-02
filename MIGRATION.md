@@ -49,7 +49,7 @@ changes, from your own machine with the real credentials in `api/.env`:
 cd api
 DATABASE_URL="<SUPABASE_TRANSACTION_POOLER_URL>" \
 DIRECT_URL="<SUPABASE_SESSION_POOLER_URL>" \
-bunx prisma db push --accept-data-loss
+bunx prisma db push --schema prisma/schema.postgres.prisma --accept-data-loss
 ```
 
 Expected output: `2 columns added to DoctorProfile` (or `Your database is
