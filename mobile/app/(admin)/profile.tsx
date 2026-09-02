@@ -1,6 +1,6 @@
 import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   Avatar,
   GlassButton,
@@ -36,7 +36,13 @@ export default function AdminProfileScreen() {
   return (
     <GlassScreen>
       <GlassHeader title="Profile" back={false} />
-      <View style={styles.body}>
+      {/* mobilefix1 BUG-1: same defect class as the staff profile — bounded
+          ScrollView so Session/Sign out stays reachable when content grows. */}
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.body}
+        showsVerticalScrollIndicator={false}
+      >
         {/* -- identity ------------------------------------------------------------ */}
         <GlassCard padded style={styles.card}>
           <View style={styles.identityRow}>
@@ -99,13 +105,16 @@ export default function AdminProfileScreen() {
           ClinIQ · Phase 10
           {Constants.expoConfig?.version ? ` · v${Constants.expoConfig.version}` : ''}
         </Text>
-      </View>
+      </ScrollView>
     </GlassScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  body: { flex: 1, padding: spacing.base, gap: spacing.base },
+  // mobilefix1: body sizes to content (flex:1 dropped) + the documented
+  // tab-screen runway (96 — floating glass tab bar, worklog 10-g).
+  scroll: { flex: 1 },
+  body: { padding: spacing.base, gap: spacing.base, paddingBottom: 96 },
   card: { gap: spacing.md },
   identityRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   identity: { flex: 1, gap: spacing.sm },

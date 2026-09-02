@@ -1,7 +1,8 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { fetchTodayQueue, confirmAppointment, rejectAppointment } from '@/lib/staff';
 import { ApiError } from '@/lib/errors';
-import { useTodayQueue, TODAY_QUEUE_POLL_INTERVAL_MS } from '../useTodayQueue';
+import { addDaysISO, istTodayISO } from '@/lib/time';
+import { useTodayQueue, TODAY_QUEUE_POLL_INTERVAL_MS, UPCOMING_SCAN_DAYS } from '../useTodayQueue';
 
 /**
  * Today-queue polling law (same architecture as the patient live queue):
@@ -12,6 +13,14 @@ import { useTodayQueue, TODAY_QUEUE_POLL_INTERVAL_MS } from '../useTodayQueue';
  * Phase 11 B3: the PENDING section — derived pending rows, single-tap
  * confirm with OPTIMISTIC flip + full ROLLBACK on failure, and the
  * non-optimistic reject (CANCELLED via the status route + patient note).
+ *
+ * mobilefix1 FIX B: the upcoming-pending scan — future-date PENDING rows
+ * (today+1…today+7) EXCLUDING the selected date, deduped by id, failed dates
+ * keep last-good rows, rescan on mutation settle + date change, NEVER on the
+ * 15s poll tick.
+ *
+ * The scan dates derive from the REAL istTodayISO() at run time — the tests
+ * compute the same window, so both sides agree without freezing the clock.
  */
 
 jest.mock('@/lib/staff', () => ({
@@ -58,6 +67,46 @@ const QUEUE = (date: string) => ({
   ],
 });
 
+/** The FIX-B scan window: today + 1 … today + 7 (mirrors the hook). */
+const scanDates = (): string[] =>
+  Array.from({ length: UPCOMING_SCAN_DAYS }, (_, i) => addDaysISO(istTodayISO(), i + 1));
+
+/** A queue with NO pending rows (the default for scanned future dates). */
+const EMPTY_QUEUE = (date: string) => ({
+  date,
+  doctor: { id: 'doc1', fullName: 'Ananya Rao' },
+  counts: { pending: 0, confirmed: 0, called: 0, completed: 0, cancelled: 0, noShow: 0 },
+  appointments: [],
+});
+
+/** A queue whose ONLY row is PENDING (an upcoming booking). */
+const PENDING_QUEUE = (date: string, id: string, name = 'Future Patient') => ({
+  date,
+  doctor: { id: 'doc1', fullName: 'Ananya Rao' },
+  counts: { pending: 1, confirmed: 0, called: 0, completed: 0, cancelled: 0, noShow: 0 },
+  appointments: [
+    {
+      id,
+      queueNumber: 7,
+      status: 'PENDING',
+      source: 'ONLINE',
+      patientName: name,
+      patientPhone: '+919812345999',
+      patientId: 'u9',
+      notes: null,
+      fee: 300,
+      estWaitMin: 30,
+      createdAt: '2026-08-30T06:00:00.000Z',
+    },
+  ],
+});
+
+/** Fetch calls made for a given date (the scan fires for OTHER dates —
+ * counting per date keeps the polling assertions scan-aware). */
+function callsFor(date: string): number {
+  return mockedFetch.mock.calls.filter((c) => c[0] === date).length;
+}
+
 function useScopedFakeTimers() {
   jest.useFakeTimers({
     doNotFake: ['queueMicrotask', 'nextTick', 'setImmediate'],
@@ -76,7 +125,13 @@ beforeEach(() => {
   mockedFetch.mockReset();
   mockedConfirm.mockReset();
   mockedReject.mockReset();
-  mockedFetch.mockResolvedValue(QUEUE('2026-08-30'));
+  // Default transport: the selected date has the classic 2-row queue; every
+  // OTHER date (the FIX-B scan window) is empty — individual tests override.
+  mockedFetch.mockImplementation((date?: string) =>
+    Promise.resolve(
+      date === '2026-08-30' ? QUEUE('2026-08-30') : EMPTY_QUEUE(date ?? '2026-08-30'),
+    ),
+  );
 });
 
 afterEach(() => {
@@ -89,15 +144,15 @@ describe('useTodayQueue — 15s cadence', () => {
     const { result } = await renderHook(() => useTodayQueue('2026-08-30', true));
 
     await act(async () => {});
-    expect(mockedFetch).toHaveBeenCalledTimes(1);
+    expect(callsFor('2026-08-30')).toBe(1); // primary queue (scan hits other dates)
     expect(result.current.data?.doctor.fullName).toBe('Ananya Rao');
     expect(result.current.loading).toBe(false);
 
     await tick();
-    expect(mockedFetch).toHaveBeenCalledTimes(2);
+    expect(callsFor('2026-08-30')).toBe(2);
 
     await tick();
-    expect(mockedFetch).toHaveBeenCalledTimes(3);
+    expect(callsFor('2026-08-30')).toBe(3);
   });
 
   test('changing the date refetches for the new date', async () => {
@@ -108,15 +163,19 @@ describe('useTodayQueue — 15s cadence', () => {
     );
 
     await act(async () => {});
-    expect(mockedFetch).toHaveBeenNthCalledWith(1, '2026-08-30');
+    expect(callsFor('2026-08-30')).toBe(1); // the primary fetch for the initial date
     expect(result.current.data?.date).toBe('2026-08-30');
 
-    mockedFetch.mockResolvedValue(QUEUE('2026-09-06'));
-    await rerender({ date: '2026-09-06' });
+    mockedFetch.mockImplementation((date?: string) =>
+      Promise.resolve(
+        date === '2026-09-15' ? QUEUE('2026-09-15') : EMPTY_QUEUE(date ?? '2026-09-15'),
+      ),
+    );
+    await rerender({ date: '2026-09-15' });
     await act(async () => {});
 
-    expect(mockedFetch).toHaveBeenNthCalledWith(2, '2026-09-06');
-    expect(result.current.data?.date).toBe('2026-09-06');
+    expect(callsFor('2026-09-15')).toBe(1);
+    expect(result.current.data?.date).toBe('2026-09-15');
   });
 });
 
@@ -136,13 +195,13 @@ describe('useTodayQueue — stops', () => {
     // Focusing starts it; unfocusing stops it again.
     await rerender({ active: true });
     await act(async () => {});
-    expect(mockedFetch).toHaveBeenCalledTimes(1);
+    expect(callsFor('2026-08-30')).toBe(1);
 
     await rerender({ active: false });
     await act(async () => {
       jest.advanceTimersByTime(5 * TODAY_QUEUE_POLL_INTERVAL_MS);
     });
-    expect(mockedFetch).toHaveBeenCalledTimes(1);
+    expect(callsFor('2026-08-30')).toBe(1);
   });
 
   test('interval cleared on unmount', async () => {
@@ -150,13 +209,13 @@ describe('useTodayQueue — stops', () => {
     const { unmount } = await renderHook(() => useTodayQueue('2026-08-30', true));
 
     await act(async () => {});
-    expect(mockedFetch).toHaveBeenCalledTimes(1);
+    expect(callsFor('2026-08-30')).toBe(1);
 
     await unmount();
     await act(async () => {
       jest.advanceTimersByTime(10 * TODAY_QUEUE_POLL_INTERVAL_MS);
     });
-    expect(mockedFetch).toHaveBeenCalledTimes(1);
+    expect(callsFor('2026-08-30')).toBe(1);
   });
 
   test('skips a tick while a previous request is still in flight', async () => {
@@ -171,20 +230,20 @@ describe('useTodayQueue — stops', () => {
 
     await renderHook(() => useTodayQueue('2026-08-30', true));
     // The initial request is now hanging.
-    expect(mockedFetch).toHaveBeenCalledTimes(1);
+    expect(mockedFetch.mock.calls.filter((c) => c[0] === '2026-08-30')).toHaveLength(1);
 
     // Tick fires while the first request is unresolved → skipped.
     await act(async () => {
       jest.advanceTimersByTime(TODAY_QUEUE_POLL_INTERVAL_MS);
     });
-    expect(mockedFetch).toHaveBeenCalledTimes(1);
+    expect(callsFor('2026-08-30')).toBe(1);
 
     // First request resolves; the NEXT tick fetches again.
     await act(async () => {
       resolveFirst(QUEUE('2026-08-30'));
     });
     await tick();
-    expect(mockedFetch).toHaveBeenCalledTimes(2);
+    expect(callsFor('2026-08-30')).toBe(2);
   });
 });
 
@@ -203,7 +262,7 @@ describe('useTodayQueue — PENDING section + confirm/reject (Phase 11 B3)', () 
   test('confirmPending flips the row OPTIMISTICALLY, calls the API, refreshes on success', async () => {
     const { result } = await renderHook(() => useTodayQueue('2026-08-30', true));
     await act(async () => {});
-    expect(mockedFetch).toHaveBeenCalledTimes(1);
+    expect(callsFor('2026-08-30')).toBe(1);
 
     // The post-confirm refresh HANGS until resolved, so the OPTIMISTIC state
     // is observable before the server truth lands (mockImplementationOnce is
@@ -234,7 +293,7 @@ describe('useTodayQueue — PENDING section + confirm/reject (Phase 11 B3)', () 
     expect(flipped?.status).toBe('CONFIRMED');
 
     // Success triggered the background refresh — now land the server truth.
-    await waitFor(() => expect(mockedFetch).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(callsFor('2026-08-30')).toBe(2));
     const serverTruth = QUEUE('2026-08-30');
     serverTruth.appointments[1].status = 'CONFIRMED';
     serverTruth.counts = { ...serverTruth.counts, pending: 0, confirmed: 3 };
@@ -266,7 +325,7 @@ describe('useTodayQueue — PENDING section + confirm/reject (Phase 11 B3)', () 
     expect(result.current.data?.counts.confirmed).toBe(2);
     expect(result.current.data?.appointments.find((a) => a.id === 'apt2')?.status).toBe('PENDING');
     // No refresh on failure (the rollback IS the state).
-    expect(mockedFetch).toHaveBeenCalledTimes(1);
+    expect(callsFor('2026-08-30')).toBe(1);
   });
 
   test('rejectPending cancels via the status route with the patient phone + note, then refreshes', async () => {
@@ -283,7 +342,7 @@ describe('useTodayQueue — PENDING section + confirm/reject (Phase 11 B3)', () 
     expect(outcome?.noteWarning).toBeNull();
     // Phone resolved from the row + the note trimmed (patient-note contract).
     expect(mockedReject).toHaveBeenCalledWith('apt2', '+919812345678', 'Double-booked slot');
-    await waitFor(() => expect(mockedFetch).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(callsFor('2026-08-30')).toBe(2));
   });
 
   test('rejectPending failure surfaces the error and NEVER mutates the rows (not optimistic)', async () => {
@@ -298,7 +357,7 @@ describe('useTodayQueue — PENDING section + confirm/reject (Phase 11 B3)', () 
 
     expect(outcome?.error).toBe('Cannot reach the server. Check your connection and try again.');
     expect(result.current.pending).toHaveLength(1); // untouched
-    expect(mockedFetch).toHaveBeenCalledTimes(1); // no refresh on failure
+    expect(callsFor('2026-08-30')).toBe(1); // no refresh on failure
   });
 
   test('rejectPending surfaces the note warning without failing the rejection', async () => {
@@ -346,14 +405,18 @@ describe('useTodayQueue — resilience', () => {
     useScopedFakeTimers();
     const { result } = await renderHook(() => useTodayQueue('2026-08-30', true));
     await act(async () => {});
-    expect(mockedFetch).toHaveBeenCalledTimes(1);
+    expect(callsFor('2026-08-30')).toBe(1);
 
     // e.g. after POST /api/queue/next the screen calls refresh()
-    mockedFetch.mockResolvedValue(QUEUE('2026-08-30'));
+    mockedFetch.mockImplementation((date?: string) =>
+      Promise.resolve(
+        date === '2026-08-30' ? QUEUE('2026-08-30') : EMPTY_QUEUE(date ?? '2026-08-30'),
+      ),
+    );
     await act(async () => {
       await result.current.refresh();
     });
-    expect(mockedFetch).toHaveBeenCalledTimes(2);
+    expect(callsFor('2026-08-30')).toBe(2);
     expect(result.current.refreshing).toBe(false);
     expect(result.current.data?.counts.called).toBe(1);
   });
@@ -376,13 +439,14 @@ describe('useTodayQueue — resilience', () => {
 
   test('stale data for an old date is hidden until the new date lands', async () => {
     let blockResolve: ((value: unknown) => void) | null = null;
-    mockedFetch.mockImplementation(
-      (date: string) =>
-        new Promise((resolve) => {
-          if (date === '2026-08-30') resolve(QUEUE('2026-08-30'));
-          else blockResolve = resolve; // the 2026-09-06 fetch hangs
-        }),
-    );
+    mockedFetch.mockImplementation((date: string) => {
+      if (date === '2026-09-15') {
+        return new Promise((resolve) => {
+          blockResolve = resolve; // the 2026-09-06 fetch hangs
+        });
+      }
+      return Promise.resolve(date === '2026-08-30' ? QUEUE('2026-08-30') : EMPTY_QUEUE(date));
+    });
 
     const { result, rerender } = await renderHook(
       ({ date }: { date: string }) => useTodayQueue(date, true),
@@ -391,14 +455,153 @@ describe('useTodayQueue — resilience', () => {
     await act(async () => {});
     expect(result.current.data?.date).toBe('2026-08-30');
 
-    await rerender({ date: '2026-09-06' });
+    await rerender({ date: '2026-09-15' });
     // New date fetch is in flight — old-date rows must NOT leak through.
     expect(result.current.data).toBeNull();
     expect(result.current.loading).toBe(true);
 
     await act(async () => {
-      (blockResolve as (value: unknown) => void)?.(QUEUE('2026-09-06'));
+      (blockResolve as (value: unknown) => void)?.(QUEUE('2026-09-15'));
     });
-    await waitFor(() => expect(result.current.data?.date).toBe('2026-09-06'));
+    await waitFor(() => expect(result.current.data?.date).toBe('2026-09-15'));
+  });
+});
+
+describe('useTodayQueue — upcoming-pending scan (mobilefix1 FIX B)', () => {
+  test('collects future-date PENDING rows and EXCLUDES the selected date', async () => {
+    const dates = scanDates();
+    const [, d2, , d4] = dates; // today+2 and today+4 carry upcoming bookings
+    mockedFetch.mockImplementation((date?: string) => {
+      if (date === '2026-08-30') return Promise.resolve(QUEUE('2026-08-30'));
+      if (date === d2) return Promise.resolve(PENDING_QUEUE(d2, 'up1'));
+      if (date === d4) return Promise.resolve(PENDING_QUEUE(d4, 'up2'));
+      return Promise.resolve(EMPTY_QUEUE(date ?? dates[0]));
+    });
+
+    const { result } = await renderHook(() => useTodayQueue('2026-08-30', true));
+    await act(async () => {});
+
+    // The two future rows appear WITH their dates; the selected date's own
+    // pending row (apt2) stays in the `pending` card instead.
+    expect(result.current.upcomingPending.map((r) => [r.appointment.id, r.date])).toEqual([
+      ['up1', d2],
+      ['up2', d4],
+    ]);
+    expect(result.current.pending.map((r) => r.id)).toEqual(['apt2']);
+    // Exactly ONE scan ran — every horizon date fetched exactly once.
+    expect(dates.filter((d) => callsFor(d) === 1)).toHaveLength(UPCOMING_SCAN_DAYS);
+    expect(result.current.error).toBeNull();
+  });
+
+  test('EXCLUDES the selected date itself when it lies inside the horizon', async () => {
+    const dates = scanDates();
+    const [d1, , d3] = dates;
+    mockedFetch.mockImplementation((date?: string) => {
+      if (date === d3) return Promise.resolve(PENDING_QUEUE(d3, 'sel1')); // the SELECTED date
+      if (date === d1) return Promise.resolve(PENDING_QUEUE(d1, 'up3'));
+      return Promise.resolve(EMPTY_QUEUE(date ?? d1));
+    });
+
+    const { result } = await renderHook(() => useTodayQueue(d3, true));
+    await act(async () => {});
+
+    // d3's booking renders in the SELECTED-date pending card, not upcoming.
+    expect(result.current.upcomingPending.map((r) => r.appointment.id)).toEqual(['up3']);
+    expect(result.current.pending.map((r) => r.id)).toEqual(['sel1']);
+  });
+
+  test('dedupes by appointment id across dates', async () => {
+    const [d1, d2] = scanDates();
+    mockedFetch.mockImplementation((date?: string) => {
+      if (date === d1 || date === d2) return Promise.resolve(PENDING_QUEUE(date as string, 'dup1'));
+      return Promise.resolve(EMPTY_QUEUE(date ?? d1));
+    });
+
+    const { result } = await renderHook(() => useTodayQueue('2026-08-30', true));
+    await act(async () => {});
+
+    expect(result.current.upcomingPending).toHaveLength(1);
+    expect(result.current.upcomingPending[0].appointment.id).toBe('dup1');
+    expect(result.current.upcomingPending[0].date).toBe(d1); // first occurrence wins
+  });
+
+  test('a failed date keeps its last-good rows — silently, no error banner', async () => {
+    const [d1, d2] = scanDates();
+    mockedFetch.mockImplementation((date?: string) => {
+      if (date === '2026-08-30') return Promise.resolve(QUEUE('2026-08-30'));
+      if (date === d1) return Promise.resolve(PENDING_QUEUE(d1, 'a1'));
+      if (date === d2) return Promise.resolve(PENDING_QUEUE(d2, 'b1'));
+      return Promise.resolve(EMPTY_QUEUE(date ?? d1));
+    });
+
+    const { result } = await renderHook(() => useTodayQueue('2026-08-30', true));
+    await act(async () => {});
+    expect(result.current.upcomingPending.map((r) => r.appointment.id)).toEqual(['a1', 'b1']);
+
+    // Rescan: d1 now FAILS (its last-good row 'a1' survives), d2 returns 'b2'.
+    mockedFetch.mockImplementation((date?: string) => {
+      if (date === '2026-08-30') return Promise.resolve(QUEUE('2026-08-30'));
+      if (date === d1) return Promise.reject(new Error('offline'));
+      if (date === d2) return Promise.resolve(PENDING_QUEUE(d2, 'b2'));
+      return Promise.resolve(EMPTY_QUEUE(date ?? d1));
+    });
+    await act(async () => {
+      await result.current.rescan();
+    });
+
+    expect(result.current.upcomingPending.map((r) => r.appointment.id)).toEqual(['a1', 'b2']);
+    expect(result.current.error).toBeNull(); // scan failures never surface here
+  });
+
+  test('confirmPending settle triggers a rescan — the confirmed row leaves the upcoming card', async () => {
+    const [d1] = scanDates();
+    mockedFetch.mockImplementation((date?: string) => {
+      if (date === '2026-08-30') return Promise.resolve(QUEUE('2026-08-30'));
+      if (date === d1) return Promise.resolve(PENDING_QUEUE(d1, 'up9'));
+      return Promise.resolve(EMPTY_QUEUE(date ?? d1));
+    });
+
+    const { result } = await renderHook(() => useTodayQueue('2026-08-30', true));
+    await act(async () => {});
+    expect(result.current.upcomingPending.map((r) => r.appointment.id)).toEqual(['up9']);
+    expect(callsFor(d1)).toBe(1);
+
+    // The server confirms; the post-settle rescan finds the row gone.
+    mockedConfirm.mockResolvedValueOnce({ appointment: { id: 'up9', status: 'CONFIRMED' } });
+    mockedFetch.mockImplementation((date?: string) => {
+      if (date === '2026-08-30') return Promise.resolve(QUEUE('2026-08-30'));
+      return Promise.resolve(EMPTY_QUEUE(date ?? d1));
+    });
+    let error: string | null = 'unset';
+    await act(async () => {
+      error = await result.current.confirmPending('up9');
+    });
+
+    expect(error).toBeNull();
+    expect(mockedConfirm).toHaveBeenCalledWith('up9');
+    await waitFor(() => expect(result.current.upcomingPending).toHaveLength(0));
+    expect(callsFor(d1)).toBe(2); // the horizon was re-scanned after the settle
+  });
+
+  test('date change rescans the horizon; the 15s poll tick does NOT', async () => {
+    useScopedFakeTimers();
+    const [d1] = scanDates();
+    const { result, rerender } = await renderHook(
+      ({ date }: { date: string }) => useTodayQueue(date, true),
+      { initialProps: { date: '2026-08-30' } },
+    );
+    await act(async () => {});
+    expect(callsFor(d1)).toBe(1); // the initial-focus scan
+
+    // A poll tick refreshes ONLY the selected date — zero scan calls.
+    await tick();
+    expect(callsFor('2026-08-30')).toBe(2);
+    expect(callsFor(d1)).toBe(1);
+
+    // Changing the selected date rescans the whole horizon.
+    await rerender({ date: '2026-09-15' }); // outside the horizon
+    await act(async () => {});
+    expect(callsFor(d1)).toBe(2);
+    expect(result.current.upcomingPending).toHaveLength(0); // empty horizon
   });
 });

@@ -3,7 +3,7 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   Avatar,
   ErrorBanner,
@@ -105,7 +105,14 @@ export default function StaffProfileScreen() {
   return (
     <GlassScreen>
       <GlassHeader title="Profile" back={false} />
-      <View style={styles.body}>
+      {/* mobilefix1 BUG-1: GlassScreen content is not scrollable by design —
+          the Phase 11 doctor edit card overflowed the fold and buried Sign
+          Out. Bounded ScrollView (L8: no flex:1 on the content container). */}
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.body}
+        showsVerticalScrollIndicator={false}
+      >
         {/* -- identity -------------------------------------------------------------- */}
         <GlassCard padded style={styles.card}>
           <View style={styles.identityRow}>
@@ -191,7 +198,7 @@ export default function StaffProfileScreen() {
         </GlassCard>
 
         <Text style={styles.version}>ClinIQ · Phase 11</Text>
-      </View>
+      </ScrollView>
     </GlassScreen>
   );
 
@@ -512,7 +519,11 @@ function optimisticView(
 }
 
 const styles = StyleSheet.create({
-  body: { flex: 1, padding: spacing.base, gap: spacing.base },
+  // mobilefix1: body sizes to content (flex:1 dropped) + the documented
+  // tab-screen runway (96 — floating glass tab bar, worklog 10-g) so the
+  // last card scrolls clear of the tab bar.
+  scroll: { flex: 1 },
+  body: { padding: spacing.base, gap: spacing.base, paddingBottom: 96 },
   card: { gap: spacing.md },
   identityRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   identity: { flex: 1, gap: spacing.sm },
