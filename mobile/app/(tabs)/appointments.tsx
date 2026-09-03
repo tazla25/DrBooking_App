@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import {
   EmptyState,
@@ -54,6 +54,23 @@ export default function MyAppointmentsScreen() {
 
   const [range, setRange] = useState<AppointmentRange>('upcoming');
   const list = useAppointments(range);
+
+  // mobilefix2 P3 — silent focus re-sync: when the tab REGAINS focus with an
+  // already-settled list, refresh in the background (no big overlay spinner —
+  // `loading` never flips; pull-to-refresh stays the manual path). The first
+  // focus is skipped by the guard: it races the mount fetch while the list
+  // is still loading (a ref snapshot avoids callback identity churn, which
+  // would re-fire the focus effect on every load state change).
+  const listRef = useRef(list);
+  useEffect(() => {
+    listRef.current = list;
+  }, [list]);
+  useFocusEffect(
+    useCallback(() => {
+      const { loading, refreshing, refresh } = listRef.current;
+      if (!loading && !refreshing) void refresh();
+    }, []),
+  );
 
   // -- cancel flow -----------------------------------------------------------
   const [cancelTarget, setCancelTarget] = useState<MyAppointment | null>(null);

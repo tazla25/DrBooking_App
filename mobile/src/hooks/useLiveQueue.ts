@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState, type AppStateStatus } from 'react-native';
 import { fetchLiveQueue, type LiveQueueResponse } from '@/lib/appointments';
 import { toFriendlyMessage } from '@/lib/errors';
 
@@ -27,6 +28,10 @@ interface QueueState {
  *
  * Rule-safe updates: no synchronous setState inside effect bodies — phase
  * transitions happen in promise callbacks; "stale" is derived via loadedFor.
+ *
+ * mobilefix2 P2 — foreground re-sync: returning to `active` after a
+ * background stint fires ONE silent refetch, skipped while a fetch is
+ * already in flight (never stacks calls). The 15s cadence is untouched.
  */
 export function useLiveQueue(scheduleId: string, date: string, active: boolean) {
   const [state, setState] = useState<QueueState>({
@@ -94,6 +99,21 @@ export function useLiveQueue(scheduleId: string, date: string, active: boolean) 
       }));
     }
   }, [scheduleId, date]);
+
+  // mobilefix2 P2 — foreground re-sync: active-after-background fires ONE
+  // silent refetch (the existing refresh path), skipped while a fetch is
+  // already in flight (the in-flight sentinel absorbs the trigger).
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
+      const prev = appStateRef.current;
+      appStateRef.current = next;
+      if (prev.match(/inactive|background/) && next === 'active' && active && !inFlight.current) {
+        void refresh();
+      }
+    });
+    return () => sub.remove();
+  }, [active, refresh]);
 
   const stale =
     state.data !== null &&

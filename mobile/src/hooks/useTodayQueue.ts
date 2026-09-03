@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState, type AppStateStatus } from 'react-native';
 import {
   fetchTodayQueue,
   confirmAppointment,
@@ -102,6 +103,11 @@ function withAppointmentStatus(
  *
  * TIME LAW: `date` is a verbatim 'YYYY-MM-DD' IST string — never converted.
  * Rule-safe updates: no synchronous setState inside effect bodies.
+ *
+ * mobilefix2 P2 — foreground re-sync: returning to `active` after a
+ * background stint fires the SILENT refresh path (refresh + rescan) once per
+ * transition, guarded by the existing in-flight sentinels (a fetch already
+ * in flight absorbs the trigger). The 15s poll cadence is untouched.
  */
 export function useTodayQueue(date: string, active: boolean) {
   const [state, setState] = useState<QueueState>({
@@ -224,6 +230,22 @@ export function useTodayQueue(date: string, active: boolean) {
       }));
     }
   }, [date]);
+
+  // mobilefix2 P2 — foreground re-sync: active-after-background fires ONE
+  // silent refresh + rescan (the same path pull-to-refresh uses), skipped
+  // while a fetch/scan is already in flight (never stacks calls).
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
+      const prev = appStateRef.current;
+      appStateRef.current = next;
+      if (prev.match(/inactive|background/) && next === 'active' && active) {
+        if (!inFlight.current) void refresh();
+        if (!scanInFlight.current) void scanUpcoming();
+      }
+    });
+    return () => sub.remove();
+  }, [active, refresh, scanUpcoming]);
 
   /**
    * CONFIRM a PENDING booking (PENDING → CONFIRMED). Optimistic: the row
