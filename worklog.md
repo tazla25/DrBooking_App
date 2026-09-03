@@ -647,3 +647,18 @@ Work Log:
 
 Stage Summary:
 - Stage A shipped: the Aurora design system (fonts, tokens, 12-component kit) + the staff Today console + staff tab bar ported 1:1 from the RECOVERED original Stitch reference, functional freeze intact (all mobilefix1/2 behavior test-verified unchanged), all gates green with two new test suites. Known deviations (all documented, all "no API behind the design element"): header location chip omitted, chamber No-Show button dropped (transition matrix), queue-pause + sms/print buttons dropped, GlassToast still legacy-styled (shared component, transient surface — Stage B).
+
+---
+Task ID: 12-a-postmerge (Phase 12 Stage A completion)
+Agent: Super Z (coding agent)
+Task: Stage A merge + EAS build + forensics + delivery report.
+
+Work Log:
+- PR #16 merged PLAIN: dbdacd5897fe34d1505b6935fe5e5d65e96a33ab (parents d88f707 + d1fd6f3). origin/main = dbdacd5.
+- EAS build 7743ccfd-c56e-469c-bc7a-ac0f708111fd (profile preview, INTERNAL): FINISHED in 747s, gitCommitHash = dbdacd5 (MERGE-COMMIT provenance, CLI-verified).
+- Forensics: artifact download/DrBooking-ClinIQ-aurora-stageA-dbdacd5.apk — 104,043,821 bytes == Content-Length; ETag "e1c68f1b047e3d7f26e678a4e529b6f0"; SHA-256 c7de3039e46fad7cd19ba840f0011259654404b3ac6e71998889ad68107cb084; app.config name=ClinIQ / package=com.drbooking.mobile; Hermes greps ALL 6 Aurora evidence strings present (MaterialSymbolsOutlined, PlusJakartaSans-SemiBold, Currently in chamber, Awaiting confirmation, Ready for chamber, Tap to confirm); fonts bundled in res/*.ttf. NEW byte fingerprint (all six prior APK sizes distinct).
+- STALE-URL IRON RULE: artifact re-downloaded post-build — 104,043,821 bytes, SAME ETag, SAME SHA-256 → link is THIS build's own verified artifact.
+- Delivery report (§7, incl. design-recovery provenance + 6 documented deviations + blur-budget table + contrast worst-pair 5.12:1 + 5-item owner visual/functional retest checklist) posted as PR comment: https://github.com/tazla25/DrBooking_App/pull/16#issuecomment-5520808038 and saved to download/phase12-stageA-report.md.
+
+Stage Summary:
+- Stage A fully delivered: merge dbdacd5 on origin/main, one verified APK (104,043,821 B / c7de3039…), gates green, report posted. NEXT: owner runs the Stage A visual-approval gate (device vs mockup) + mobilefix1/2 functional retests; only then Stage B (all remaining screens + advanced polish; 6 screens of reference already recovered, Stitch generation quota untouched).
