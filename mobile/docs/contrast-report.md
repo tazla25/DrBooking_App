@@ -66,5 +66,113 @@ These pairs render in the app but sit outside the spec's card-alpha envelope (ne
 - White on the solid CTA accent (~2.9): pre-existing brand choice for 11–16px semibold labels on `ctaGradient`. A future phase could deepen the accent end-stop or switch labels to navy; out of scope here (B6 rejected adjacent label changes).
 - Status tints over card: inherited from the Phase 8 frozen palette; re-check if the band changes again.
 
+
+## Aurora gate (Phase 12 — light pastel canvas + white acrylic + M3)
+
+Model: aurora text tokens composited over the light canvas stops `#BFD9F2 → #C7E3EC → #CBC6E8` (parsed live from `src/theme/aurora.ts`) × the glass tier alphas `0.70 / 0.80 / 0.90`, plus the gradient CTA stops, chip pairs, solid buttons and the status tints. Regression law: the gated worst must stay ≥ 4.72:1 (the Phase-10 worst — no regression below it).
+
+| Text token | Surface (worst) | Ratio | Verdict |
+| --- | --- | ---: | --- |
+| onSurface | aurora top a=0.70 | 15.44 | PASS |
+| onSurface | aurora top a=0.80 | 15.92 | PASS |
+| onSurface | aurora top a=0.90 | 16.55 | PASS |
+| onSurface | aurora mid a=0.70 | 15.78 | PASS |
+| onSurface | aurora mid a=0.80 | 16.17 | PASS |
+| onSurface | aurora mid a=0.90 | 16.64 | PASS |
+| onSurface | aurora bottom a=0.70 | 14.92 | PASS |
+| onSurface | aurora bottom a=0.80 | 15.69 | PASS |
+| onSurface | aurora bottom a=0.90 | 16.37 | PASS |
+| onSurfaceVariant | aurora top a=0.70 | 8.43 | PASS |
+| onSurfaceVariant | aurora top a=0.80 | 8.69 | PASS |
+| onSurfaceVariant | aurora top a=0.90 | 9.03 | PASS |
+| onSurfaceVariant | aurora mid a=0.70 | 8.61 | PASS |
+| onSurfaceVariant | aurora mid a=0.80 | 8.82 | PASS |
+| onSurfaceVariant | aurora mid a=0.90 | 9.08 | PASS |
+| onSurfaceVariant | aurora bottom a=0.70 | 8.14 | PASS |
+| onSurfaceVariant | aurora bottom a=0.80 | 8.56 | PASS |
+| onSurfaceVariant | aurora bottom a=0.90 | 8.93 | PASS |
+| primary | aurora top a=0.70 | 8.23 | PASS |
+| primary | aurora top a=0.80 | 8.48 | PASS |
+| primary | aurora top a=0.90 | 8.82 | PASS |
+| primary | aurora mid a=0.70 | 8.40 | PASS |
+| primary | aurora mid a=0.80 | 8.61 | PASS |
+| primary | aurora mid a=0.90 | 8.87 | PASS |
+| primary | aurora bottom a=0.70 | 7.95 | PASS |
+| primary | aurora bottom a=0.80 | 8.36 | PASS |
+| primary | aurora bottom a=0.90 | 8.72 | PASS |
+| secondary | aurora top a=0.70 | 5.80 | PASS |
+| secondary | aurora top a=0.80 | 5.98 | PASS |
+| secondary | aurora top a=0.90 | 6.21 | PASS |
+| secondary | aurora mid a=0.70 | 5.92 | PASS |
+| secondary | aurora mid a=0.80 | 6.07 | PASS |
+| secondary | aurora mid a=0.90 | 6.25 | PASS |
+| secondary | aurora bottom a=0.70 | 5.60 | PASS |
+| secondary | aurora bottom a=0.80 | 5.89 | PASS |
+| secondary | aurora bottom a=0.90 | 6.14 | PASS |
+| tertiary | aurora top a=0.70 | 8.24 | PASS |
+| tertiary | aurora top a=0.80 | 8.49 | PASS |
+| tertiary | aurora top a=0.90 | 8.83 | PASS |
+| tertiary | aurora mid a=0.70 | 8.42 | PASS |
+| tertiary | aurora mid a=0.80 | 8.63 | PASS |
+| tertiary | aurora mid a=0.90 | 8.88 | PASS |
+| tertiary | aurora bottom a=0.70 | 7.96 | PASS |
+| tertiary | aurora bottom a=0.80 | 8.37 | PASS |
+| tertiary | aurora bottom a=0.90 | 8.73 | PASS |
+| error | aurora top a=0.70 | 5.81 | PASS |
+| error | aurora top a=0.80 | 5.99 | PASS |
+| error | aurora top a=0.90 | 6.23 | PASS |
+| error | aurora mid a=0.70 | 5.94 | PASS |
+| error | aurora mid a=0.80 | 6.09 | PASS |
+| error | aurora mid a=0.90 | 6.27 | PASS |
+| error | aurora bottom a=0.70 | 5.62 | PASS |
+| error | aurora bottom a=0.80 | 5.91 | PASS |
+| error | aurora bottom a=0.90 | 6.16 | PASS |
+| onErrorContainer | aurora top a=0.70 | 8.42 | PASS |
+| onErrorContainer | aurora top a=0.80 | 8.68 | PASS |
+| onErrorContainer | aurora top a=0.90 | 9.02 | PASS |
+| onErrorContainer | aurora mid a=0.70 | 8.60 | PASS |
+| onErrorContainer | aurora mid a=0.80 | 8.82 | PASS |
+| onErrorContainer | aurora mid a=0.90 | 9.07 | PASS |
+| onErrorContainer | aurora bottom a=0.70 | 8.13 | PASS |
+| onErrorContainer | aurora bottom a=0.80 | 8.55 | PASS |
+| onErrorContainer | aurora bottom a=0.90 | 8.92 | PASS |
+| onSecondaryContainer | aurora top a=0.70 | 6.40 | PASS |
+| onSecondaryContainer | aurora top a=0.80 | 6.60 | PASS |
+| onSecondaryContainer | aurora top a=0.90 | 6.86 | PASS |
+| onSecondaryContainer | aurora mid a=0.70 | 6.54 | PASS |
+| onSecondaryContainer | aurora mid a=0.80 | 6.70 | PASS |
+| onSecondaryContainer | aurora mid a=0.90 | 6.90 | PASS |
+| onSecondaryContainer | aurora bottom a=0.70 | 6.18 | PASS |
+| onSecondaryContainer | aurora bottom a=0.80 | 6.50 | PASS |
+| onSecondaryContainer | aurora bottom a=0.90 | 6.78 | PASS |
+| onTertiaryFixedVariant | aurora top a=0.70 | 8.36 | PASS |
+| onTertiaryFixedVariant | aurora top a=0.80 | 8.62 | PASS |
+| onTertiaryFixedVariant | aurora top a=0.90 | 8.96 | PASS |
+| onTertiaryFixedVariant | aurora mid a=0.70 | 8.54 | PASS |
+| onTertiaryFixedVariant | aurora mid a=0.80 | 8.76 | PASS |
+| onTertiaryFixedVariant | aurora mid a=0.90 | 9.01 | PASS |
+| onTertiaryFixedVariant | aurora bottom a=0.70 | 8.08 | PASS |
+| onTertiaryFixedVariant | aurora bottom a=0.80 | 8.50 | PASS |
+| onTertiaryFixedVariant | aurora bottom a=0.90 | 8.86 | PASS |
+| onPrimary | gradient primary-container | 6.29 | PASS |
+| onPrimary | onDark chip on primary-container | 5.12 | PASS |
+| onPrimary | gradient primary | 9.14 | PASS |
+| onPrimary | onDark chip on primary | 7.40 | PASS |
+| onPrimary | gradient secondary | 6.44 | PASS |
+| onPrimary | onDark chip on secondary | 5.21 | PASS |
+| primary | white CTA | 9.14 | PASS |
+| onPrimary | tertiary button | 9.15 | PASS |
+| onErrorContainer | errorContainer | 7.24 | PASS |
+| onPrimary | selected chip | 6.29 | PASS |
+| onSurfaceVariant | quiet chip | 8.49 | PASS |
+| auroraStatus.PENDING | status PENDING on bottom | 7.24 | PASS |
+| auroraStatus.CONFIRMED | status CONFIRMED on bottom | 5.55 | PASS |
+| auroraStatus.CALLED | status CALLED on bottom | 6.72 | PASS |
+| auroraStatus.COMPLETED | status COMPLETED on bottom | 7.52 | PASS |
+| auroraStatus.CANCELLED | status CANCELLED on top | 7.24 | PASS |
+| auroraStatus.NO_SHOW | status NO_SHOW on top | 7.26 | PASS |
+
+**AURORA GATE PASSED** — all 98 pairs ≥ 4.5:1; worst 5.12:1 (onPrimary @ onDark chip on primary-container, floor 4.72:1).
+
 ---
 Generated by `scripts/contrast-check.ts` — run `bun scripts/contrast-check.ts` from `mobile/` after any token change. Failing the gate fails the delivery.
