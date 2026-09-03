@@ -11,6 +11,7 @@ import {
   Switch,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import {
   AuroraButton,
@@ -98,10 +99,16 @@ const COUNT_CARDS: {
  * booking).
  *
  * mobilefix2 FIX-C: pending patients live IN the patient list (no floating
- * cards above it). The unified list renders section headers + pending rows
- * (selected date) + upcoming pending rows (future dates, each with its date)
- * + the confirmed queue. A pending row is COMPACT and expands in place on
- * tap to reveal its Confirm/Reject actions — one row expanded at a time.
+ * cards above it) — no floating cards, no separate sections per date.
+ *
+ * mobilefix3 FIX-C (supersedes the mobilefix2 tap-to-reveal UX — owner's
+ * design decision after device use): the pending surface is ONE horizontal
+ * snap carousel (selected-date cards first, then upcoming by date
+ * ascending) under a single "Awaiting confirmation (N)" header whose count
+ * comes from the SAME combined array the cards render. Each card carries
+ * its Confirm/Reject actions ALWAYS VISIBLE (side-by-side at the card
+ * bottom) — no tap-to-expand, no chevron, no hint. The queue (confirmed
+ * rows) stays vertical below it.
  *
  * Phase 12 "Aurora Glass v2" (Stage A): this screen is the design-adoption
  * pilot — ported 1:1 from the Stitch staff-console reference (spec §8).
@@ -120,14 +127,31 @@ const COUNT_CARDS: {
  * operates on IST today; walk-in dates must be today-or-future).
  */
 
-/** mobilefix2 FIX-C — the unified Today list item union: section headers,
- * pending patients (selected date), upcoming pending patients (future dates)
- * and confirmed queue rows — ONE list, composition order fixed. */
+/** mobilefix2 FIX-C → mobilefix3 FIX-C — the unified Today list item union:
+ * the pending CAROUSEL (one horizontal item carrying every pending card),
+ * section headers and confirmed queue rows — ONE list, composition order
+ * fixed (carousel first, then the vertical queue). */
 type TodayListItem =
   | { kind: 'header'; id: string; label: string; count?: number }
-  | { kind: 'pending'; appointment: StaffQueueAppointment }
-  | { kind: 'upcomingPending'; appointment: StaffQueueAppointment; date: string }
+  | { kind: 'pendingCarousel' }
   | { kind: 'queue'; appointment: StaffQueueAppointment };
+
+/** One pending carousel card's data: the appointment + its IST date when the
+ * booking is on a FUTURE date (selected-date cards omit `date`). */
+interface PendingCardData {
+  appointment: StaffQueueAppointment;
+  /** 'YYYY-MM-DD' IST — present ONLY on upcoming (future-date) cards. */
+  date?: string;
+}
+
+/**
+ * mobilefix3 FIX-C — the pending card width, ~78% of the window width (the
+ * owner's carousel spec: the next card always peeks). A documented screen
+ * constant in the B4-96 family: a RATIO is not a spacing/radius token, and
+ * the design's intent (peek fraction) lives with the carousel, not the
+ * theme. The snap interval derives from it + the track gap (spacing.sm).
+ */
+const PENDING_CARD_WIDTH_RATIO = 0.78;
 
 export default function StaffTodayScreen() {
   const user = useAuthStore((s) => s.user);
@@ -160,9 +184,15 @@ export default function StaffTodayScreen() {
   const [me, setMe] = useState<MeResponse | null>(null);
   const [availability, setAvailabilityState] = useState<boolean | null>(null);
   const [toggling, setToggling] = useState(false);
+  /** mobilefix3 FIX-B2 loading-guard ref — set SYNCHRONOUSLY by the mount
+   * fetch below, so the mount-time run of the focus-refetch effect (declared
+   * after it — effect order guarantees the sequencing) is absorbed: the
+   * mount fetch stays ONCE and only a REGAINED focus refetches. */
+  const meLoadingRef = useRef(false);
 
   useEffect(() => {
     let alive = true;
+    meLoadingRef.current = true; // FIX-B2: absorb the mount-time focus run
     api
       .get<MeResponse>('/api/auth/me')
       .then(async (data) => {
@@ -181,11 +211,33 @@ export default function StaffTodayScreen() {
           }
         }
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => {
+        meLoadingRef.current = false; // FIX-B2: a regained focus may refetch
+      });
     return () => {
       alive = false;
     };
   }, []);
+
+  // mobilefix3 FIX-B2 — silent /api/auth/me refetch on REGAINED focus (the
+  // P3 pattern: useFocusEffect + ref snapshot + loading-guard; no big
+  // spinner). An avatar edited in Profile (PATCH /api/doctors/me) surfaces in
+  // the header on return WITHOUT relaunching; failures keep the last-good
+  // identity (silent — the header never blanks mid-use). Mount stays ONCE.
+  useFocusEffect(
+    useCallback(() => {
+      if (meLoadingRef.current) return; // loading-guard — never stacks fetches
+      meLoadingRef.current = true;
+      void api
+        .get<MeResponse>('/api/auth/me')
+        .then((data) => setMe(data))
+        .catch(() => undefined)
+        .finally(() => {
+          meLoadingRef.current = false;
+        });
+    }, []),
+  );
 
   const onToggleAvailability = (value: boolean) => {
     if (toggling || availability === null) return;
@@ -281,13 +333,10 @@ export default function StaffTodayScreen() {
 
   // -- PENDING section: manual confirm / reject (Phase 11 B3) ------------------
 
-  // mobilefix2 FIX-C: tap-to-reveal state — the expanded pending row shows
-  // its actions; ONE row expanded at a time (tapping another collapses the
-  // previous, tapping the expanded row collapses it). Cleared on mutation
-  // settle — the row then leaves the list via normal data re-derivation.
-  const [expandedId, setExpandedId] = useState<string | null>(null);
   /** mutatingId-style double-tap guard for the pending confirm (ref = the
-   * synchronous half; the state half drives the button disabled visuals). */
+   * synchronous half; the state half drives the per-card busy visuals —
+   * mobilefix3: BOTH buttons on the MUTATING card only disable; every other
+   * card stays enabled). */
   const [pendingMutatingId, setPendingMutatingId] = useState<string | null>(null);
   const pendingMutatingRef = useRef<string | null>(null);
 
@@ -300,7 +349,8 @@ export default function StaffTodayScreen() {
     pendingMutatingRef.current = null;
     setPendingMutatingId(null);
     if (error === null) {
-      setExpandedId(null); // collapse on settle — the row leaves via re-derivation
+      // mobilefix3: no reveal state to collapse — the card leaves the
+      // carousel via normal data re-derivation (the optimistic flip).
       hapticSuccess();
       show(`Serial #${appointment.queueNumber} confirmed — patient notified`, 'success');
     } else {
@@ -334,7 +384,8 @@ export default function StaffTodayScreen() {
     const token = rejectTarget.queueNumber;
     setRejectTarget(null);
     setRejectNote('');
-    setExpandedId(null); // collapse on settle — the row leaves via re-derivation
+    // mobilefix3: no reveal state to collapse — the card leaves the carousel
+    // via normal data re-derivation (refresh + rescan already ran).
     show(
       noteWarning ?? `Serial #${token} rejected — the patient is notified of the cancellation`,
       noteWarning ? 'info' : 'success',
@@ -425,50 +476,39 @@ export default function StaffTodayScreen() {
   );
 
   // The confirmed queue EXCLUDES the pending rows — they render in their own
-  // section inside the unified list (the pending rows come from the hook,
-  // same underlying data). Phase 12: the CALLED (now-serving) patient renders
-  // as the "Currently in chamber" hero card ABOVE the list — the queue rows
-  // below are everyone else (same data, the design's presentation).
+  // carousel above it (the pending rows come from the hook, same underlying
+  // data). Phase 12: the CALLED (now-serving) patient renders as the
+  // "Currently in chamber" hero card ABOVE the list — the queue rows below
+  // are everyone else (same data, the design's presentation).
   const nowServing = (data?.appointments ?? []).find((a) => a.status === 'CALLED') ?? null;
   const queueRows = (data?.appointments ?? []).filter(
     (a) => a.status !== 'PENDING' && a.id !== nowServing?.id,
   );
   const nextUp = queueRows.find((a) => a.status === 'CONFIRMED') ?? null;
 
-  // mobilefix2 FIX-C — ONE unified list. Composition order: selected-date
-  // pending → upcoming (future-date) pending → the confirmed queue; only
-  // non-empty sections render their header, and counts derive from the SAME
-  // arrays the rows render (never hand-counted literals).
+  // mobilefix3 FIX-C — the ONE combined pending surface: selected-date cards
+  // first, then upcoming (future-date) cards by date ascending. This array
+  // feeds the carousel AND its section count (never hand-counted).
+  const pendingCards: PendingCardData[] = [
+    ...queue.pending.map((appointment) => ({ appointment })),
+    ...queue.upcomingPending.map((row) => ({
+      appointment: row.appointment,
+      date: row.date,
+    })),
+  ];
+
+  // ONE unified list: the pending carousel (when any card exists) → the
+  // confirmed queue; only non-empty sections render, and the carousel count
+  // derives from the SAME array the cards render.
   const queueHeaderLabel = `Queue · ${isToday ? 'Today' : formatDateISO(selectedDate)}`;
   const items: TodayListItem[] = [];
-  if (queue.pending.length > 0) {
-    items.push({
-      kind: 'header',
-      id: 'pending',
-      label: 'Awaiting confirmation',
-      count: queue.pending.length,
-    });
-    for (const appointment of queue.pending) items.push({ kind: 'pending', appointment });
-  }
-  if (queue.upcomingPending.length > 0) {
-    items.push({
-      kind: 'header',
-      id: 'upcoming',
-      label: 'Upcoming — awaiting confirmation',
-      count: queue.upcomingPending.length,
-    });
-    for (const row of queue.upcomingPending)
-      items.push({ kind: 'upcomingPending', appointment: row.appointment, date: row.date });
+  if (pendingCards.length > 0) {
+    items.push({ kind: 'pendingCarousel' });
   }
   if (queueRows.length > 0) {
     items.push({ kind: 'header', id: 'queue', label: queueHeaderLabel });
     for (const appointment of queueRows) items.push({ kind: 'queue', appointment });
   }
-
-  const toggleExpanded = (id: string) => {
-    hapticSelection();
-    setExpandedId((prev) => (prev === id ? null : id));
-  };
 
   const renderItem = ({ item, index }: { item: TodayListItem; index: number }) => {
     switch (item.kind) {
@@ -478,18 +518,14 @@ export default function StaffTodayScreen() {
             <SectionHeader label={item.label} count={item.count} pending={item.id !== 'queue'} />
           </AnimatedEntrance>
         );
-      case 'pending':
-      case 'upcomingPending':
+      case 'pendingCarousel':
         return (
           <AnimatedEntrance index={index}>
-            <PendingRow
-              appointment={item.appointment}
-              forDate={item.kind === 'upcomingPending' ? item.date : undefined}
-              expanded={expandedId === item.appointment.id}
-              busy={pendingMutatingId === item.appointment.id}
-              onToggle={() => toggleExpanded(item.appointment.id)}
-              onConfirm={() => void onConfirmPending(item.appointment)}
-              onReject={() => openReject(item.appointment)}
+            <PendingCarousel
+              cards={pendingCards}
+              busyId={pendingMutatingId}
+              onConfirm={(appointment) => void onConfirmPending(appointment)}
+              onReject={openReject}
             />
           </AnimatedEntrance>
         );
@@ -509,7 +545,11 @@ export default function StaffTodayScreen() {
 
   return (
     <AuroraScreen noTopInset>
-      <AuroraHeader context="Staff Console" userName={user?.name ?? undefined} />
+      <AuroraHeader
+        context="Staff Console"
+        userName={user?.name ?? undefined}
+        avatarUrl={me?.doctorProfile?.avatarUrl ?? null}
+      />
       <View style={styles.body}>
         {queue.loading ? (
           <View style={styles.center}>
@@ -524,7 +564,11 @@ export default function StaffTodayScreen() {
           <FlatList
             data={items}
             keyExtractor={(item) =>
-              item.kind === 'header' ? `header:${item.id}` : `${item.kind}:${item.appointment.id}`
+              item.kind === 'header'
+                ? `header:${item.id}`
+                : item.kind === 'pendingCarousel'
+                  ? 'pending-carousel'
+                  : `queue:${item.appointment.id}`
             }
             renderItem={renderItem}
             testID="today-queue-list"
@@ -1039,46 +1083,96 @@ function ChamberHero({
 }
 
 // ---------------------------------------------------------------------------
-// Pending row (Phase 11 B3; mobilefix2 FIX-C tap-to-reveal) — the
-// manual-confirmation inbox, IN the patient list
+// Pending carousel (Phase 11 B3; mobilefix2 FIX-C → mobilefix3 FIX-C) — the
+// manual-confirmation inbox: ONE horizontal snap carousel above the queue
 // ---------------------------------------------------------------------------
 
-function PendingRow({
+function PendingCarousel({
+  cards,
+  busyId,
+  onConfirm,
+  onReject,
+}: {
+  /** The combined pending surface (selected-date first, then upcoming by
+   * date ascending) — the SAME array drives the section count. */
+  cards: PendingCardData[];
+  /** pendingMutatingId — the busy card (its BOTH buttons disable). */
+  busyId: string | null;
+  onConfirm: (appointment: StaffQueueAppointment) => void;
+  onReject: (appointment: StaffQueueAppointment) => void;
+}) {
+  const { width: windowWidth } = useWindowDimensions();
+  // ~78% window width (PENDING_CARD_WIDTH_RATIO) so the NEXT card peeks; the
+  // snap interval = card width + the track gap (spacing.sm) — one card per snap.
+  const cardWidth = windowWidth * PENDING_CARD_WIDTH_RATIO;
+  const snapInterval = cardWidth + auroraSpacing.sm;
+
+  return (
+    <View style={styles.carouselBlock}>
+      <SectionHeader label="Awaiting confirmation" count={cards.length} pending />
+      <ScrollView
+        horizontal
+        snapToInterval={snapInterval}
+        decelerationRate="fast"
+        showsHorizontalScrollIndicator={false}
+        testID="today-pending-carousel"
+        style={styles.carouselScroll}
+        contentContainerStyle={styles.carouselTrack}
+      >
+        {cards.map((card) => (
+          <PendingCard
+            key={card.appointment.id}
+            appointment={card.appointment}
+            forDate={card.date}
+            width={cardWidth}
+            busy={busyId === card.appointment.id}
+            onConfirm={() => onConfirm(card.appointment)}
+            onReject={() => onReject(card.appointment)}
+          />
+        ))}
+        {/* Trailing runway — the last card snaps fully clear of the fold
+          (same B1 law as the date strip). */}
+        <View style={styles.carouselTrailing} />
+      </ScrollView>
+    </View>
+  );
+}
+
+function PendingCard({
   appointment,
   forDate,
-  expanded,
+  width,
   busy,
-  onToggle,
   onConfirm,
   onReject,
 }: {
   appointment: StaffQueueAppointment;
   /** mobilefix1 FIX B: the booking's IST date ('YYYY-MM-DD') — present ONLY on
-   * upcoming (future-date) rows; the selected-date section omits it. */
+   * upcoming (future-date) cards; selected-date cards omit it. */
   forDate?: string;
-  /** mobilefix2 FIX-C: tap-to-reveal — the actions render only when the row
-   * is expanded (compact otherwise; the whole row is the toggle). */
-  expanded: boolean;
-  /** mutatingId-style busy: disables the revealed actions while a confirm
-   * mutation for THIS row is in flight (double-tap guard). */
+  /** The carousel card width (~78% of the window — the peek fraction). */
+  width: number;
+  /** mutatingId-style busy: disables BOTH buttons on THIS card only while a
+   * confirm mutation for it is in flight (double-tap guard; every other card
+   * stays enabled). */
   busy: boolean;
-  onToggle: () => void;
   onConfirm: () => void;
   onReject: () => void;
 }) {
   const bookedAt = istTimeOfISO(appointment.createdAt);
   const forDateLabel = forDate ? formatDateISO(forDate) : null;
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ expanded }}
-      accessibilityLabel={`${appointment.patientName}, token ${appointment.queueNumber}, awaiting confirmation`}
-      onPress={onToggle}
-      style={({ pressed }) => [pressed && styles.pendingRowPressed]}
+    <View
+      role="group"
+      accessibilityLabel={`${appointment.patientName}, token ${appointment.queueNumber}, awaiting confirmation${
+        forDateLabel ? ` for ${forDateLabel}` : ''
+      }`}
+      testID="today-pending-card"
+      style={[styles.pendingCardWrap, { width }]}
     >
-      <GlassCardV2 tier="tile" style={styles.pendingRow}>
+      <GlassCardV2 tier="tile" style={styles.pendingCard}>
         <View style={styles.rowTop}>
-          <View style={styles.tokenSquare}>
+          <View style={styles.tokenCircle}>
             <Text style={styles.tokenNum}>#{appointment.queueNumber}</Text>
           </View>
           <View style={styles.rowIdentity}>
@@ -1090,47 +1184,39 @@ function PendingRow({
           <AuroraStatusChip status="PENDING" label="Pending" />
         </View>
         <View style={styles.metaRow}>
-          <Text style={styles.metaText}>
-            Booked {bookedAt ? `${bookedAt} IST` : 'earlier'} · awaiting confirmation
-          </Text>
-          <View style={styles.tapHint}>
-            <MaterialIcon
-              name={expanded ? 'expand_less' : 'expand_more'}
-              size={14}
-              color={auroraColors.onSurfaceVariant}
-            />
-            <Text style={styles.tapHintText}>Tap to confirm</Text>
-          </View>
+          <Text style={styles.metaText}>Booked {bookedAt ? `${bookedAt} IST` : 'earlier'}</Text>
         </View>
         {forDateLabel ? (
-          <View style={styles.metaRow}>
-            <MaterialIcon name="calendar_today" size={14} color={auroraColors.onSurfaceVariant} />
-            <Text style={styles.metaText} accessibilityLabel={`Appointment date ${forDateLabel}`}>
+          <View style={styles.forDateChip}>
+            <MaterialIcon name="calendar_today" size={14} color={auroraColors.primary} />
+            <Text
+              style={styles.forDateChipText}
+              accessibilityLabel={`Appointment date ${forDateLabel}`}
+            >
               For {forDateLabel}
             </Text>
           </View>
         ) : null}
-        {expanded ? (
-          <View style={styles.rowActions}>
-            <AuroraButton
-              label="Confirm"
-              icon="check_circle"
-              disabled={busy}
-              onPress={onConfirm}
-              style={styles.pendingConfirmBtn}
-            />
-            <AuroraButton
-              label="Reject"
-              icon="close"
-              variant="danger"
-              disabled={busy}
-              onPress={onReject}
-              style={styles.rowBtn}
-            />
-          </View>
-        ) : null}
+        {/* ALWAYS visible, side-by-side at the card bottom — no tap-to-reveal. */}
+        <View style={styles.pendingCardActions}>
+          <AuroraButton
+            label="Confirm"
+            icon="check_circle"
+            disabled={busy}
+            onPress={onConfirm}
+            style={styles.pendingConfirmBtn}
+          />
+          <AuroraButton
+            label="Reject"
+            icon="close"
+            variant="danger"
+            disabled={busy}
+            onPress={onReject}
+            style={styles.pendingRejectBtn}
+          />
+        </View>
       </GlassCardV2>
-    </Pressable>
+    </View>
   );
 }
 
@@ -1611,7 +1697,7 @@ const styles = StyleSheet.create({
   },
   confirmButtons: { gap: auroraSpacing.sm },
 
-  // pending section (Phase 11 B3; mobilefix2 FIX-C: in-list sections)
+  // pending carousel (Phase 11 B3; mobilefix3 FIX-C: one snap carousel)
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1625,19 +1711,42 @@ const styles = StyleSheet.create({
     ...auroraTypography.headlineSm,
     color: auroraColors.onSurface,
   },
-  pendingRow: { gap: auroraSpacing.sm, padding: auroraSpacing.md },
-  pendingConfirmBtn: { flex: 1 },
-  tapHint: {
-    marginLeft: 'auto',
+  carouselBlock: { gap: auroraSpacing.xs },
+  // B1 full-bleed law: the track scrolls to the SCREEN edges — the negative
+  // margin cancels the list's content padding (base), the track padding
+  // restores card alignment with the rest of the content.
+  carouselScroll: { marginHorizontal: -auroraSpacing.base },
+  carouselTrack: { gap: auroraSpacing.sm, paddingHorizontal: auroraSpacing.base },
+  carouselTrailing: { width: auroraSpacing.base },
+  pendingCardWrap: { flexShrink: 1 },
+  pendingCard: { gap: auroraSpacing.sm, padding: auroraSpacing.md },
+  tokenCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20, // true circle = size/2 (the pill/round law)
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: auroraTints.tokenSquare,
+  },
+  forDateChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: auroraSpacing.xxs,
+    alignSelf: 'flex-start',
+    backgroundColor: auroraTints.primary10,
+    borderColor: auroraTints.primary35,
+    borderWidth: 1,
+    borderRadius: auroraRadii.pill,
+    paddingHorizontal: auroraSpacing.sm,
+    paddingVertical: 2,
   },
-  tapHintText: {
+  forDateChipText: {
     ...auroraTypography.labelSm,
-    color: auroraColors.onSurfaceVariant,
+    color: auroraColors.primary,
   },
-  pendingRowPressed: { opacity: 0.6 },
+  pendingCardActions: { flexDirection: 'row', gap: auroraSpacing.sm },
+  pendingConfirmBtn: { flex: 1 },
+  pendingRejectBtn: { flex: 1 },
 
   // walk-in modal
   walkInDate: {

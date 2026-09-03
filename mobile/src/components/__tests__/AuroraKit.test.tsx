@@ -194,11 +194,36 @@ describe('AuroraChip family', () => {
   });
 });
 
-describe('AuroraHeader', () => {
-  test('renders the brand wordmark and context label', async () => {
-    const { getByText } = await render(<AuroraHeader context="Staff Console" brand="DrBooking" />);
-    expect(getByText('DrBooking')).toBeTruthy();
+describe('AuroraHeader (brand + avatar — mobilefix3 FIX-A/FIX-B)', () => {
+  test('brand defaults to ClinIQ (the app name) with the context label', async () => {
+    const { getByText } = await render(<AuroraHeader context="Staff Console" />);
+    expect(getByText('ClinIQ')).toBeTruthy();
     expect(getByText('Staff Console')).toBeTruthy();
+  });
+
+  test('an explicit brand override still wins over the default', async () => {
+    const { getByText, queryByText } = await render(<AuroraHeader brand="Custom" context="x" />);
+    expect(getByText('Custom')).toBeTruthy();
+    expect(queryByText('ClinIQ')).toBeNull();
+  });
+
+  test('avatar renders the PHOTO when avatarUrl is set (no initials fallback)', async () => {
+    const { getByLabelText, queryByText } = await render(
+      <AuroraHeader userName="Dr Yx" avatarUrl="data:image/png;base64,iVBORw0KGgo" />,
+    );
+    // The existing Avatar component: Image with the "{name} photo" label.
+    expect(getByLabelText('Dr Yx photo')).toBeTruthy();
+    expect(queryByText('DY')).toBeNull();
+  });
+
+  test('avatar falls back to initials when avatarUrl is null or undefined', async () => {
+    const withNull = await render(<AuroraHeader userName="Dr Yx" avatarUrl={null} />);
+    expect(withNull.getByText('DY')).toBeTruthy();
+    expect(withNull.queryByLabelText('Dr Yx photo')).toBeNull();
+
+    const withoutProp = await render(<AuroraHeader userName="Dr Yx" />);
+    expect(withoutProp.getByText('DY')).toBeTruthy();
+    expect(withoutProp.queryByLabelText('Dr Yx photo')).toBeNull();
   });
 });
 
