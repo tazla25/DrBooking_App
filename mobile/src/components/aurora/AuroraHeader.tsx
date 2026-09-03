@@ -24,6 +24,12 @@ interface AuroraHeaderProps {
   right?: ReactNode;
   /** Logged-in user's name (drives the avatar initials). */
   userName?: string;
+  /**
+   * mobilefix3 FIX-B: the logged-in user's photo (data URL from
+   * /api/auth/me → doctorProfile.avatarUrl). Passed through to the existing
+   * Avatar component — Image when set, initials fallback otherwise.
+   */
+  avatarUrl?: string | null;
 }
 
 /**
@@ -41,11 +47,12 @@ interface AuroraHeaderProps {
  * wordmark) for stack screens; the avatar falls back to the context slot.
  */
 export function AuroraHeader({
-  brand = 'DrBooking',
+  brand = 'ClinIQ',
   context,
   back = false,
   right,
   userName,
+  avatarUrl,
 }: AuroraHeaderProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -74,7 +81,7 @@ export function AuroraHeader({
         </View>
         <View style={styles.right}>
           {right ?? (context ? <Text style={styles.context}>{context}</Text> : null)}
-          {userName ? <Avatar name={userName} size={32} /> : null}
+          {userName ? <Avatar name={userName} size={32} uri={avatarUrl ?? null} /> : null}
         </View>
       </View>
     </View>

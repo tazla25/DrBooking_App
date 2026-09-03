@@ -451,6 +451,52 @@ for (const [st, { fg: fgHex, bg }] of Object.entries(auroraStatus)) {
   });
 }
 
+// A8) mobilefix3 FIX-C — pending-carousel card pairs: the carousel card is
+// the TILE tier (white .70); the token-circle text, the caption, the PENDING
+// chip and the For-date chip composite over it on ALL 3 canvas stops (the
+// chips are translucent washes, so the canvas shows through the stack).
+// The Confirm/Reject buttons are solid/gradient surfaces already gated by
+// A2/A4; the card's plain text roles over tile are gated by A1 — this block
+// gates the carousel's ACTUAL composite stacks (tint over tile over stop).
+function auroraTintValue(key: string): string {
+  const m = new RegExp(`\\b${key}:\\s*'(rgba\\([^']+\\))'`).exec(AURORA_SRC);
+  if (!m) throw new Error(`aurora tint not found in src/theme/aurora.ts: ${key}`);
+  return m[1];
+}
+interface CarouselPairSpec {
+  name: string;
+  fg: string;
+  /** Translucent wash composited over the tile (null = text over the tile). */
+  tint: string | null;
+}
+const carouselPairSpecs: CarouselPairSpec[] = [
+  {
+    name: 'carousel.tokenNum',
+    fg: aurora.roles.onSurfaceVariant,
+    tint: auroraTintValue('tokenSquare'),
+  },
+  { name: 'carousel.metaText', fg: aurora.roles.onSurfaceVariant, tint: null },
+  { name: 'carousel.pendingChip', fg: auroraStatus.PENDING.fg, tint: auroraStatus.PENDING.bg },
+  { name: 'carousel.forDateChip', fg: aurora.roles.primary, tint: auroraTintValue('primary10') },
+];
+for (const { name, fg, tint } of carouselPairSpecs) {
+  const fgRgb = hexToRgb(fg);
+  const layer = tint ? parseColor(tint) : null;
+  for (let s = 0; s < 3; s++) {
+    const base = hexToRgb(aurora.canvas[AURORA_CANVAS_NAMES[s] as keyof typeof aurora.canvas]);
+    let surface = over(base, { rgb: [255, 255, 255], alpha: aurora.glass.tile });
+    if (layer) surface = over(surface, layer);
+    const r = ratio(fgRgb, surface);
+    if (r < AA_NORMAL) auroraFailed = true;
+    auroraGateRows.push({
+      pair: name,
+      surface: `carousel tile on ${AURORA_CANVAS_NAMES[s]}${tint ? ' + chip tint' : ''}`,
+      ratio: r,
+      pass: r >= AA_NORMAL,
+    });
+  }
+}
+
 // A7) regression law (Phase 12 §5): the Aurora palette's gated worst must not
 // regress below the Phase-10 worst (4.72:1) — report the worst pair either way.
 const AURORA_FLOOR = 4.72;
@@ -514,7 +560,7 @@ report.push('');
 report.push('## Aurora gate (Phase 12 — light pastel canvas + white acrylic + M3)');
 report.push('');
 report.push(
-  `Model: aurora text tokens composited over the light canvas stops \`${aurora.canvas.top} → ${aurora.canvas.mid} → ${aurora.canvas.bottom}\` (parsed live from \`src/theme/aurora.ts\`) × the glass tier alphas \`${auroraCardAlphas.map((a) => a.toFixed(2)).join(' / ')}\`, plus the gradient CTA stops, chip pairs, solid buttons and the status tints. Regression law: the gated worst must stay ≥ ${AURORA_FLOOR}:1 (the Phase-10 worst — no regression below it).`,
+  `Model: aurora text tokens composited over the light canvas stops \`${aurora.canvas.top} → ${aurora.canvas.mid} → ${aurora.canvas.bottom}\` (parsed live from \`src/theme/aurora.ts\`) × the glass tier alphas \`${auroraCardAlphas.map((a) => a.toFixed(2)).join(' / ')}\`, plus the gradient CTA stops, chip pairs, solid buttons, the status tints and the mobilefix3 carousel card stacks (chip tint over tile over stop). Regression law: the gated worst must stay ≥ ${AURORA_FLOOR}:1 (the Phase-10 worst — no regression below it).`,
 );
 report.push('');
 report.push('| Text token | Surface (worst) | Ratio | Verdict |');

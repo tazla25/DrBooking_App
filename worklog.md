@@ -662,3 +662,29 @@ Work Log:
 
 Stage Summary:
 - Stage A fully delivered: merge dbdacd5 on origin/main, one verified APK (104,043,821 B / c7de3039…), gates green, report posted. NEXT: owner runs the Stage A visual-approval gate (device vs mockup) + mobilefix1/2 functional retests; only then Stage B (all remaining screens + advanced polish; 6 screens of reference already recovered, Stitch generation quota untouched).
+
+---
+Task ID: 12-m3 (mobilefix3 — header branding + doctor avatar + horizontal pending carousel)
+Agent: Super Z (coding agent)
+Task: mobilefix3 runbook (owner's post-device-use decisions): FIX-A header brand text, FIX-B/B2 doctor photo in the header + silent focus refetch, FIX-C horizontal snap pending carousel superseding the mobilefix2 tap-to-reveal UX.
+
+Work Log:
+- Base verified S-M0: origin/main == 2531a5e (docs) on dbdacd5 (PR #16 merge); ALL §1 anchors line-exact at checkout (AuroraHeader L44/L73/L76-78, Avatar uri L13, staff index L288/L292/L433/L436/L468/L473/L530/L531/L955/L1046/L1293, profile PATCH flow).
+- §1 baselines self-run, all green: mobile jest 26/347; api jest EXACTLY 30/248; tsc 0 / lint 0 / prettier clean; contrast 98 aurora pairs min 5.12:1; audit-assets PASS.
+- FIX-A: AuroraHeader default brand 'DrBooking' → 'ClinIQ' (prop override stays). Sweep `rg "DrBooking" app src` → ZERO hits (tests included — the AuroraKit override test now uses a neutral 'Custom' brand).
+- FIX-B: AuroraHeader gains `avatarUrl?: string | null`; renders `<Avatar name={userName} size={32} uri={avatarUrl ?? null} />` (the existing Image-vs-initials component — no new avatar written). Staff Today passes `me?.doctorProfile?.avatarUrl ?? null` (the mount /api/auth/me call — zero new fetches for the photo itself).
+- FIX-B2: silent /api/auth/me refetch on REGAINED focus — the P3 pattern (useFocusEffect + meLoadingRef snapshot + loading-guard). Mount fetch stays ONCE (its synchronous ref set absorbs the mount-time focus run; effect declaration order guarantees it). No big spinner; failures keep the last-good identity.
+- FIX-C: BOTH pending sections replaced by ONE horizontal snap carousel (single FlatList item, FlatList + testID="today-queue-list" intact). Combined array = selected-date cards first, then upcoming by date ascending; the section header "Awaiting confirmation (N)" counts the SAME array. Cards ~78% window width (documented PENDING_CARD_WIDTH_RATIO), gap spacing.sm, snapToInterval = card + gap, decelerationRate="fast", no indicator, testID="today-pending-carousel". Card = GlassCardV2 tile + token CIRCLE + name + phone + PENDING chip + "Booked {time} IST" caption + "For {date}" chip (calendar icon, sourceChip tint family) on upcoming cards + Confirm (gradient CTA, checkmark) and Reject (danger, close) ALWAYS VISIBLE side-by-side at the bottom. tap-to-reveal state removed entirely (expandedId/toggleExpanded/"Tap to confirm"/chevrons deleted). Preserved: onConfirmPending/openReject handlers, pendingMutatingRef+state guard (busy disables BOTH buttons on the MUTATING card only), optimistic flip + rollback, reject modal + notes flow, RefreshControl (refresh + rescan), B4-96 runway, a11y group labels (+ "for {date}" on upcoming).
+- Token law L2: zero new tokens (reused auroraTints.tokenSquare/primary10/primary35, auroraRadii.pill, auroraSpacing, auroraColors); PENDING_CARD_WIDTH_RATIO documented in the B4-96 literal family.
+- Tests: todayConsole.upcoming.test.tsx PORTED to the carousel anatomy — all 9 mobilefix2 tests re-expressed (composition+order, always-visible buttons, same-handler upcoming confirm, selected-date confirm → queue grows, reject modal, zero-pending silence, EmptyState, pull-to-rescan) + NEW (snap props, multi-card layout ~78%, busy-disable per-card + double-fire guard, combined header count drain 2→1, FIX-B2 focus refetch with avatar update). AuroraKit: header brand default/override + avatar Image-vs-initials. 26 suites / 354 tests (347 + 7 additions, zero deletions elsewhere).
+- contrast-check.ts extended (A8): 12 carousel pairs (tokenNum/pendingChip/forDateChip/metaText over tint-over-tile over all 3 canvas stops) — aurora gate 110 pairs, min 5.12:1 (unchanged worst: onPrimary @ onDark chip on primary-container; floor 4.72:1), worst carousel pair 6.88:1. Report regenerated (docs/contrast-report.md).
+- Gates (self-run, verbatim runbook §3):
+  - tsc / lint 0-warn / prettier clean — PASS (tsc 0 errors; eslint exit 0, zero findings; prettier all files clean).
+  - mobile jest: ALL pass, ≥ 26/347 baseline, additions only — PASS (26 suites / 354 tests; 347 + 7).
+  - contrast-check.ts: extended with carousel card pairs (text/chips over glass on all 3 canvas stops); floor 4.72:1, all pass, report worst pair — PASS (110 aurora pairs, all ≥ 4.5:1, min 5.12:1, floor 4.72:1; worst carousel pair 6.88:1).
+  - audit-assets PASS. api/ diff EMPTY; api jest EXACTLY 30/248 — PASS.
+  - Hermes forensics: pending the post-merge EAS build (recorded in the delivery report).
+- L1 mobile-only diff: 6 files (mobile/app/(staff)/index.tsx, mobile/src/components/aurora/AuroraHeader.tsx, mobile/app/__tests__/todayConsole.upcoming.test.tsx, mobile/src/components/__tests__/AuroraKit.test.tsx, mobile/scripts/contrast-check.ts, mobile/docs/contrast-report.md) + this worklog. No package.json/bun.lock changes.
+
+Stage Summary:
+- mobilefix3 shipped on branch v2/phase-12-mobilefix3: ClinIQ wordmark, live doctor photo in the header with focus-refresh, and the owner's horizontal pending carousel — functional freeze intact outside the three named fixes, all mobilefix1/2 behaviors test-verified. Next: PR → plain merge → ONE EAS preview build from the merge commit → Hermes forensics ("ClinIQ" present, "Tap to confirm" ABSENT, "Awaiting confirmation" present) → §5 report + owner retest checklist.
