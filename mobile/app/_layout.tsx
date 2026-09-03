@@ -19,10 +19,16 @@ export default function RootLayout() {
 
   // Inter (SIL OFL 1.1 — assets/fonts/Inter-OFL.txt). A load error counts as
   // "done": the app proceeds on the system font fallback, never a blank gate.
+  // Phase 12 (Aurora): Plus Jakarta Sans 600/700 headlines (SIL OFL 1.1 —
+  // assets/fonts/PlusJakartaSans-OFL.txt) + Material Symbols Outlined
+  // (subset, Apache 2.0 — assets/fonts/MaterialSymbolsOutlined-LICENSE.txt).
   const [fontsLoaded, fontError] = useFonts({
     'Inter-Regular': require('../assets/fonts/Inter-Regular.ttf'),
     'Inter-SemiBold': require('../assets/fonts/Inter-SemiBold.ttf'),
     'Inter-Bold': require('../assets/fonts/Inter-Bold.ttf'),
+    'PlusJakartaSans-SemiBold': require('../assets/fonts/PlusJakartaSans-SemiBold.ttf'),
+    'PlusJakartaSans-Bold': require('../assets/fonts/PlusJakartaSans-Bold.ttf'),
+    MaterialSymbolsOutlined: require('../assets/fonts/MaterialSymbolsOutlined.ttf'),
   });
 
   // Push setup (B1): foreground presentation + Android channel — idempotent,

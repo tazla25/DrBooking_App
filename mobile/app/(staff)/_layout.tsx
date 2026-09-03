@@ -1,10 +1,7 @@
-import { Ionicons } from '@expo/vector-icons';
 import { Redirect, Tabs } from 'expo-router';
-import { BlurView } from 'expo-blur';
-import { StyleSheet } from 'react-native';
 import { hapticSelection } from '@/lib/haptics';
 import { useAuthStore } from '@/store/auth';
-import { colors, typography } from '@/theme';
+import { AuroraNav, type MaterialIconName } from '@/components/aurora';
 
 /**
  * Staff console (DOCTOR + COMPOUNDER) — tabbed panel (Phase 7).
@@ -17,7 +14,20 @@ import { colors, typography } from '@/theme';
  *  - Today / Patients / Schedules / Profile — DOCTOR and COMPOUNDER;
  *  - Team — DOCTOR only (compounders calling /api/compounders get 403).
  * `patient/[phone]` is a pushed route, hidden from the tab bar (href: null).
+ *
+ * Phase 12 "Aurora Glass v2" (Stage A): the tab bar is the design's floating
+ * glass PILL (AuroraNav — white .80 capsule, r999, indigo shadow, Material
+ * Symbols icons). Visual-only diff: the tab set, titles, press haptics and
+ * route guards are unchanged (functional freeze L5).
  */
+const STAFF_TAB_ICONS: Record<string, MaterialIconName> = {
+  index: 'assignment',
+  patients: 'groups',
+  schedules: 'calendar_month',
+  team: 'shield_person',
+  profile: 'person',
+};
+
 export default function StaffLayout() {
   const status = useAuthStore((s) => s.status);
   const user = useAuthStore((s) => s.user);
@@ -33,80 +43,20 @@ export default function StaffLayout() {
   return (
     <Tabs
       screenListeners={{ tabPress: () => hapticSelection() }}
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: colors.ctaGradient.end,
-        tabBarInactiveTintColor: colors.text.secondary,
-        tabBarLabelStyle: { ...typography.micro },
-        tabBarStyle: {
-          position: 'absolute',
-          backgroundColor: colors.glass.tabBar, // Phase 10 token (0.55)
-          borderTopColor: colors.glass.border,
-          borderTopWidth: 1,
-        },
-        tabBarBackground: () => (
-          <BlurView intensity={35} tint="light" style={StyleSheet.absoluteFill} />
-        ),
-      }}
+      tabBar={(props) => <AuroraNav {...props} icons={STAFF_TAB_ICONS} />}
+      screenOptions={{ headerShown: false }}
     >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Today',
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'flash' : 'flash-outline'} size={22} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="patients"
-        options={{
-          title: 'Patients',
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'people' : 'people-outline'} size={22} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="schedules"
-        options={{
-          title: 'Schedules',
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'calendar' : 'calendar-outline'} size={22} color={color} />
-          ),
-        }}
-      />
-      {isDoctor ? (
-        <Tabs.Screen
-          name="team"
-          options={{
-            title: 'Team',
-            tabBarIcon: ({ color, focused }) => (
-              <Ionicons
-                name={focused ? 'shield-checkmark' : 'shield-checkmark-outline'}
-                size={22}
-                color={color}
-              />
-            ),
-          }}
-        />
-      ) : null}
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Profile',
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'person' : 'person-outline'} size={22} color={color} />
-          ),
-        }}
-      />
+      <Tabs.Screen name="index" options={{ title: 'Today' }} />
+      <Tabs.Screen name="patients" options={{ title: 'Patients' }} />
+      <Tabs.Screen name="schedules" options={{ title: 'Schedules' }} />
+      {isDoctor ? <Tabs.Screen name="team" options={{ title: 'Team' }} /> : null}
+      <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
       {/* Pushed detail route — reachable but never a tab. */}
       <Tabs.Screen
         name="patient/[phone]"
         options={{
           href: null,
           title: 'Patient notes',
-          tabBarIcon: ({ color }) => <Ionicons name="person" size={22} color={color} />,
         }}
       />
     </Tabs>

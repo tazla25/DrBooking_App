@@ -237,6 +237,227 @@ for (const st of statusNames) {
   });
 }
 
+// =============================================================================
+// AURORA GATE (Phase 12 "Aurora Glass v2", spec §2/§3) — the light pastel
+// canvas + white acrylic glass + M3 palette family. Same law as the legacy
+// gate: composites the text tokens over the worst-case surface and asserts
+// 4.5:1; a failing pair means the TOKEN is wrong (fix the token, never the
+// gate). Double-entry: values are parsed from src/theme/aurora.ts and
+// cross-checked against the ledger below — drift fails the run loudly.
+// =============================================================================
+const AURORA_SRC = readFileSync(join(__dirname, '..', 'src', 'theme', 'aurora.ts'), 'utf8');
+
+function auroraToken(key: string): string {
+  const m = new RegExp(`\\b${key}:\\s*'#([0-9a-fA-F]{6})'`).exec(AURORA_SRC);
+  if (!m) throw new Error(`aurora token not found in src/theme/aurora.ts: ${key}`);
+  return `#${m[1]}`;
+}
+function auroraAlpha(key: string): number {
+  const m = new RegExp(`\\b${key}:\\s*'rgba\\(255, 255, 255, ([0-9.]+)\\)'`).exec(AURORA_SRC);
+  if (!m) throw new Error(`aurora glass tier not found in src/theme/aurora.ts: ${key}`);
+  return Number(m[1]);
+}
+
+const aurora = {
+  canvas: {
+    top: auroraToken('top'),
+    mid: auroraToken('mid'),
+    bottom: auroraToken('bottom'),
+  },
+  roles: {
+    onSurface: auroraToken('onSurface'),
+    onSurfaceVariant: auroraToken('onSurfaceVariant'),
+    primary: auroraToken('primary'),
+    primaryContainer: auroraToken('primaryContainer'),
+    secondary: auroraToken('secondary'),
+    tertiary: auroraToken('tertiary'),
+    error: auroraToken('error'),
+    errorContainer: auroraToken('errorContainer'),
+    onErrorContainer: auroraToken('onErrorContainer'),
+    onSecondaryContainer: auroraToken('onSecondaryContainer'),
+    onTertiaryFixedVariant: auroraToken('onTertiaryFixedVariant'),
+    onPrimary: auroraToken('onPrimary'),
+    surfaceContainerLow: auroraToken('surfaceContainerLow'),
+  },
+  glass: {
+    tile: auroraAlpha('tile'),
+    card: auroraAlpha('card'),
+    hero: auroraAlpha('hero'),
+  },
+};
+
+// double-entry ledger for the aurora canvas (drift = loud failure)
+const AURORA_CANVAS_LEDGER = ['#BFD9F2', '#C7E3EC', '#CBC6E8'] as const;
+const auroraDrift = ['top', 'mid', 'bottom'].some(
+  (k, i) => aurora.canvas[k as keyof typeof aurora.canvas] !== AURORA_CANVAS_LEDGER[i],
+);
+const AURORA_CANVAS_NAMES = ['top', 'mid', 'bottom'] as const;
+const AURORA_TEXT_ROLES: [string, string][] = [
+  ['onSurface', aurora.roles.onSurface],
+  ['onSurfaceVariant', aurora.roles.onSurfaceVariant],
+  ['primary', aurora.roles.primary],
+  ['secondary', aurora.roles.secondary],
+  ['tertiary', aurora.roles.tertiary],
+  ['error', aurora.roles.error],
+  ['onErrorContainer', aurora.roles.onErrorContainer],
+  ['onSecondaryContainer', aurora.roles.onSecondaryContainer],
+  ['onTertiaryFixedVariant', aurora.roles.onTertiaryFixedVariant],
+];
+
+interface AuroraGateRow {
+  pair: string;
+  surface: string;
+  ratio: number;
+  pass: boolean;
+}
+
+const auroraGateRows: AuroraGateRow[] = [];
+let auroraFailed = false;
+const auroraCardAlphas = [aurora.glass.tile, aurora.glass.card, aurora.glass.hero];
+
+// A1) text roles x (canvas stops x glass tier alphas)
+for (const [name, fgHex] of AURORA_TEXT_ROLES) {
+  const fg = hexToRgb(fgHex);
+  for (let s = 0; s < 3; s++) {
+    const base = hexToRgb(aurora.canvas[AURORA_CANVAS_NAMES[s] as keyof typeof aurora.canvas]);
+    for (const a of auroraCardAlphas) {
+      const surface = over(base, { rgb: [255, 255, 255], alpha: a });
+      const r = ratio(fg, surface);
+      const pass = r >= AA_NORMAL;
+      if (!pass) auroraFailed = true;
+      auroraGateRows.push({
+        pair: name,
+        surface: `aurora ${AURORA_CANVAS_NAMES[s]} a=${a.toFixed(2)}`,
+        ratio: r,
+        pass,
+      });
+    }
+  }
+}
+
+// A2) on-primary text over the gradient CTA stops (+ the onDark chip layer —
+// the white overlay alpha is parsed LIVE from the auroraTints.onDarkChip
+// token, so drift between the token and the gate fails loudly).
+const gradientStops: [string, string][] = [
+  ['primary-container', aurora.roles.primaryContainer],
+  ['primary', aurora.roles.primary],
+  ['secondary', aurora.roles.secondary],
+];
+const onPrimary = hexToRgb(aurora.roles.onPrimary);
+function auroraTintAlpha(key: string): number {
+  const m = new RegExp(`\\b${key}:\\s*'rgba\\(255, 255, 255, ([0-9.]+)\\)'`).exec(AURORA_SRC);
+  if (!m) throw new Error(`aurora tint not found in src/theme/aurora.ts: ${key}`);
+  return Number(m[1]);
+}
+const onDarkChipAlpha = auroraTintAlpha('onDarkChip');
+for (const [gName, gHex] of gradientStops) {
+  const r = ratio(onPrimary, hexToRgb(gHex));
+  if (r < AA_NORMAL) auroraFailed = true;
+  auroraGateRows.push({
+    pair: 'onPrimary',
+    surface: `gradient ${gName}`,
+    ratio: r,
+    pass: r >= AA_NORMAL,
+  });
+  const chip = over(hexToRgb(gHex), { rgb: [255, 255, 255], alpha: onDarkChipAlpha });
+  const rChip = ratio(onPrimary, chip);
+  if (rChip < AA_NORMAL) auroraFailed = true;
+  auroraGateRows.push({
+    pair: 'onPrimary',
+    surface: `onDark chip on ${gName}`,
+    ratio: rChip,
+    pass: rChip >= AA_NORMAL,
+  });
+}
+
+// A3) primary text over the WHITE CTA / glass quick-action surface
+{
+  const r = ratio(hexToRgb(aurora.roles.primary), [255, 255, 255]);
+  if (r < AA_NORMAL) auroraFailed = true;
+  auroraGateRows.push({ pair: 'primary', surface: 'white CTA', ratio: r, pass: r >= AA_NORMAL });
+}
+// A4) on-tertiary over the tertiary solid button; on-error-container over the
+// danger surface; on-primary over the tertiary (Mark Completed pill text).
+{
+  const r = ratio(onPrimary, hexToRgb(aurora.roles.tertiary));
+  if (r < AA_NORMAL) auroraFailed = true;
+  auroraGateRows.push({
+    pair: 'onPrimary',
+    surface: 'tertiary button',
+    ratio: r,
+    pass: r >= AA_NORMAL,
+  });
+  const r2 = ratio(hexToRgb(aurora.roles.onErrorContainer), hexToRgb(aurora.roles.errorContainer));
+  if (r2 < AA_NORMAL) auroraFailed = true;
+  auroraGateRows.push({
+    pair: 'onErrorContainer',
+    surface: 'errorContainer',
+    ratio: r2,
+    pass: r2 >= AA_NORMAL,
+  });
+}
+// A5) chip pairs: selected (onPrimary over primaryContainer) and quiet
+// (onSurfaceVariant over surfaceContainerLow).
+{
+  const r = ratio(onPrimary, hexToRgb(aurora.roles.primaryContainer));
+  if (r < AA_NORMAL) auroraFailed = true;
+  auroraGateRows.push({
+    pair: 'onPrimary',
+    surface: 'selected chip',
+    ratio: r,
+    pass: r >= AA_NORMAL,
+  });
+  const r2 = ratio(
+    hexToRgb(aurora.roles.onSurfaceVariant),
+    hexToRgb(aurora.roles.surfaceContainerLow),
+  );
+  if (r2 < AA_NORMAL) auroraFailed = true;
+  auroraGateRows.push({
+    pair: 'onSurfaceVariant',
+    surface: 'quiet chip',
+    ratio: r2,
+    pass: r2 >= AA_NORMAL,
+  });
+}
+// A6) status fg over its tint composited over the aurora card (worst stop)
+const auroraStatus: Record<string, { fg: string; bg: string }> = {};
+for (const m of AURORA_SRC.matchAll(/([A-Z_]+):\s*\{\s*fg:\s*'([^']+)',\s*bg:\s*'([^']+)'\s*\}/g)) {
+  auroraStatus[m[1]] = { fg: m[2], bg: m[3] };
+}
+if (Object.keys(auroraStatus).length < 6) {
+  throw new Error('aurora status palette extraction failed — token file structure changed?');
+}
+for (const [st, { fg: fgHex, bg }] of Object.entries(auroraStatus)) {
+  const fg = hexToRgb(fgHex);
+  const tint = parseColor(bg);
+  let worst = Number.POSITIVE_INFINITY;
+  let worstSurface = '';
+  for (let s = 0; s < 3; s++) {
+    const base = hexToRgb(aurora.canvas[AURORA_CANVAS_NAMES[s] as keyof typeof aurora.canvas]);
+    const cardSurface = over(base, { rgb: [255, 255, 255], alpha: aurora.glass.card });
+    const chipSurface = over(cardSurface, tint);
+    const r = ratio(fg, chipSurface);
+    if (r < worst) {
+      worst = r;
+      worstSurface = `status ${st} on ${AURORA_CANVAS_NAMES[s]}`;
+    }
+  }
+  if (worst < AA_NORMAL) auroraFailed = true;
+  auroraGateRows.push({
+    pair: `auroraStatus.${st}`,
+    surface: worstSurface,
+    ratio: worst,
+    pass: worst >= AA_NORMAL,
+  });
+}
+
+// A7) regression law (Phase 12 §5): the Aurora palette's gated worst must not
+// regress below the Phase-10 worst (4.72:1) — report the worst pair either way.
+const AURORA_FLOOR = 4.72;
+const auroraMinRow = auroraGateRows.reduce((m, r) => (r.ratio < m.ratio ? r : m));
+const auroraRegression = auroraMinRow.ratio < AURORA_FLOOR;
+if (auroraRegression) auroraFailed = true;
+
 // --- report ----------------------------------------------------------------------
 const report: string[] = [];
 report.push('# Contrast audit — Glass Reality (Phase 10, A3)');
@@ -289,6 +510,27 @@ report.push(
   '- Status tints over card: inherited from the Phase 8 frozen palette; re-check if the band changes again.',
 );
 report.push('');
+report.push('');
+report.push('## Aurora gate (Phase 12 — light pastel canvas + white acrylic + M3)');
+report.push('');
+report.push(
+  `Model: aurora text tokens composited over the light canvas stops \`${aurora.canvas.top} → ${aurora.canvas.mid} → ${aurora.canvas.bottom}\` (parsed live from \`src/theme/aurora.ts\`) × the glass tier alphas \`${auroraCardAlphas.map((a) => a.toFixed(2)).join(' / ')}\`, plus the gradient CTA stops, chip pairs, solid buttons and the status tints. Regression law: the gated worst must stay ≥ ${AURORA_FLOOR}:1 (the Phase-10 worst — no regression below it).`,
+);
+report.push('');
+report.push('| Text token | Surface (worst) | Ratio | Verdict |');
+report.push('| --- | --- | ---: | --- |');
+for (const row of auroraGateRows) {
+  report.push(
+    `| ${row.pair} | ${row.surface} | ${fmt(row.ratio)} | ${row.pass ? 'PASS' : '**FAIL**'} |`,
+  );
+}
+report.push('');
+report.push(
+  auroraFailed
+    ? `**AURORA GATE FAILED** — worst ${fmt(auroraMinRow.ratio)}:1 (${auroraMinRow.pair} @ ${auroraMinRow.surface}). Fix the token, not the gate.`
+    : `**AURORA GATE PASSED** — all ${auroraGateRows.length} pairs ≥ ${AA_NORMAL}:1; worst ${fmt(auroraMinRow.ratio)}:1 (${auroraMinRow.pair} @ ${auroraMinRow.surface}, floor ${AURORA_FLOOR}:1).`,
+);
+report.push('');
 report.push('---');
 report.push(
   'Generated by `scripts/contrast-check.ts` — run `bun scripts/contrast-check.ts` from `mobile/` after any token change. Failing the gate fails the delivery.',
@@ -308,6 +550,13 @@ for (const row of gateRows.filter((r) => !r.pass)) {
 }
 const worstAppendix = Math.min(...appendix.map((a) => a.worst));
 console.log(`Appendix: ${appendix.length} informational pairs (worst ${fmt(worstAppendix)}:1).`);
+const auroraPass = auroraGateRows.every((r) => r.pass);
+console.log(
+  `Aurora gate — ${auroraGateRows.length} pairs, minimum ${fmt(auroraMinRow.ratio)}:1 (${auroraMinRow.pair} @ ${auroraMinRow.surface}); floor ${AURORA_FLOOR}:1.`,
+);
+for (const row of auroraGateRows.filter((r) => !r.pass)) {
+  console.log(`  AURORA FAIL ${row.pair} @ ${row.surface} -> ${fmt(row.ratio)}:1`);
+}
 console.log(`Report written: ${reportPath}`);
 if (drift) {
   console.error(
@@ -315,8 +564,18 @@ if (drift) {
   );
   process.exit(1);
 }
+if (auroraDrift) {
+  console.error(
+    'AURORA DOUBLE-ENTRY DRIFT: canvas stops in this script do not match src/theme/aurora.ts — update one of them.',
+  );
+  process.exit(1);
+}
 if (gateFailed) {
   console.error('GATE FAILED — fix the token, not the gate.');
   process.exit(1);
 }
-console.log('GATE PASSED.');
+if (!auroraPass) {
+  console.error('AURORA GATE FAILED — fix the token, not the gate.');
+  process.exit(1);
+}
+console.log('GATE PASSED (legacy + aurora).');
