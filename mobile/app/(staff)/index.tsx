@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -75,16 +75,32 @@ const COUNT_CARDS: { key: keyof TodayQueueCounts; label: string }[] = [
  * dates are read-only), 15s focus-polling, full patient names + phones BY
  * DESIGN (masking exists only on the public patient queue).
  *
- * Phase 11 B3: a PENDING section sits ABOVE the confirmed queue — online
- * bookings land there awaiting manual confirmation. Confirm = single tap
- * (optimistic, rolls back on failure); Reject = glass confirm modal with an
- * optional note (persisted as a patient note) → CANCELLED. The serial never
- * changes on confirmation (it was allocated at booking).
+ * Phase 11 B3: online bookings land PENDING awaiting manual confirmation.
+ * Confirm = single tap (optimistic, rolls back on failure); Reject = glass
+ * confirm modal with an optional note (persisted as a patient note) →
+ * CANCELLED. The serial never changes on confirmation (it was allocated at
+ * booking).
+ *
+ * mobilefix2 FIX-C: pending patients live IN the patient list (no floating
+ * cards above it). The unified list renders section headers + pending rows
+ * (selected date) + upcoming pending rows (future dates, each with its date)
+ * + the confirmed queue. A pending row is COMPACT and expands in place on
+ * tap to reveal its Confirm/Reject actions — one row expanded at a time.
  *
  * Queue actions follow the server's transition matrix exactly; "Call next"
  * and walk-ins are TODAY-gated per the server rules (queue/next always
  * operates on IST today; walk-in dates must be today-or-future).
  */
+
+/** mobilefix2 FIX-C — the unified Today list item union: section headers,
+ * pending patients (selected date), upcoming pending patients (future dates)
+ * and confirmed queue rows — ONE list, composition order fixed. */
+type TodayListItem =
+  | { kind: 'header'; id: string; label: string; count?: number }
+  | { kind: 'pending'; appointment: StaffQueueAppointment }
+  | { kind: 'upcomingPending'; appointment: StaffQueueAppointment; date: string }
+  | { kind: 'queue'; appointment: StaffQueueAppointment };
+
 export default function StaffTodayScreen() {
   const user = useAuthStore((s) => s.user);
   const { toast, show } = useToast();
@@ -230,10 +246,26 @@ export default function StaffTodayScreen() {
 
   // -- PENDING section: manual confirm / reject (Phase 11 B3) ------------------
 
+  // mobilefix2 FIX-C: tap-to-reveal state — the expanded pending row shows
+  // its actions; ONE row expanded at a time (tapping another collapses the
+  // previous, tapping the expanded row collapses it). Cleared on mutation
+  // settle — the row then leaves the list via normal data re-derivation.
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  /** mutatingId-style double-tap guard for the pending confirm (ref = the
+   * synchronous half; the state half drives the button disabled visuals). */
+  const [pendingMutatingId, setPendingMutatingId] = useState<string | null>(null);
+  const pendingMutatingRef = useRef<string | null>(null);
+
   const onConfirmPending = async (appointment: StaffQueueAppointment) => {
+    if (pendingMutatingRef.current !== null) return; // double-tap can't double-fire
+    pendingMutatingRef.current = appointment.id;
+    setPendingMutatingId(appointment.id);
     hapticSelection(); // instant tick — the optimistic flip is immediate
     const error = await queue.confirmPending(appointment.id);
+    pendingMutatingRef.current = null;
+    setPendingMutatingId(null);
     if (error === null) {
+      setExpandedId(null); // collapse on settle — the row leaves via re-derivation
       hapticSuccess();
       show(`Serial #${appointment.queueNumber} confirmed — patient notified`, 'success');
     } else {
@@ -267,6 +299,7 @@ export default function StaffTodayScreen() {
     const token = rejectTarget.queueNumber;
     setRejectTarget(null);
     setRejectNote('');
+    setExpandedId(null); // collapse on settle — the row leaves via re-derivation
     show(
       noteWarning ?? `Serial #${token} rejected — the patient is notified of the cancellation`,
       noteWarning ? 'info' : 'success',
@@ -356,15 +389,77 @@ export default function StaffTodayScreen() {
     addDaysISO(istToday, i - DATE_STRIP_BACK),
   );
 
-  const renderItem = ({ item, index }: { item: StaffQueueAppointment; index: number }) => (
-    <AnimatedEntrance index={index}>
-      <QueueRow appointment={item} mutatingId={mutating} onAction={onRowAction} />
-    </AnimatedEntrance>
-  );
-
   // The confirmed queue EXCLUDES the pending rows — they render in their own
-  // section at the top (the pending list comes from the hook, same data).
+  // section inside the unified list (the pending rows come from the hook,
+  // same underlying data).
   const queueRows = (data?.appointments ?? []).filter((a) => a.status !== 'PENDING');
+
+  // mobilefix2 FIX-C — ONE unified list. Composition order: selected-date
+  // pending → upcoming (future-date) pending → the confirmed queue; only
+  // non-empty sections render their header, and counts derive from the SAME
+  // arrays the rows render (never hand-counted literals).
+  const queueHeaderLabel = `Queue · ${isToday ? 'Today' : formatDateISO(selectedDate)}`;
+  const items: TodayListItem[] = [];
+  if (queue.pending.length > 0) {
+    items.push({
+      kind: 'header',
+      id: 'pending',
+      label: 'Awaiting confirmation',
+      count: queue.pending.length,
+    });
+    for (const appointment of queue.pending) items.push({ kind: 'pending', appointment });
+  }
+  if (queue.upcomingPending.length > 0) {
+    items.push({
+      kind: 'header',
+      id: 'upcoming',
+      label: 'Upcoming — awaiting confirmation',
+      count: queue.upcomingPending.length,
+    });
+    for (const row of queue.upcomingPending)
+      items.push({ kind: 'upcomingPending', appointment: row.appointment, date: row.date });
+  }
+  if (queueRows.length > 0) {
+    items.push({ kind: 'header', id: 'queue', label: queueHeaderLabel });
+    for (const appointment of queueRows) items.push({ kind: 'queue', appointment });
+  }
+
+  const toggleExpanded = (id: string) => {
+    hapticSelection();
+    setExpandedId((prev) => (prev === id ? null : id));
+  };
+
+  const renderItem = ({ item, index }: { item: TodayListItem; index: number }) => {
+    switch (item.kind) {
+      case 'header':
+        return (
+          <AnimatedEntrance index={index}>
+            <SectionHeader label={item.label} count={item.count} pending={item.id !== 'queue'} />
+          </AnimatedEntrance>
+        );
+      case 'pending':
+      case 'upcomingPending':
+        return (
+          <AnimatedEntrance index={index}>
+            <PendingRow
+              appointment={item.appointment}
+              forDate={item.kind === 'upcomingPending' ? item.date : undefined}
+              expanded={expandedId === item.appointment.id}
+              busy={pendingMutatingId === item.appointment.id}
+              onToggle={() => toggleExpanded(item.appointment.id)}
+              onConfirm={() => void onConfirmPending(item.appointment)}
+              onReject={() => openReject(item.appointment)}
+            />
+          </AnimatedEntrance>
+        );
+      case 'queue':
+        return (
+          <AnimatedEntrance index={index}>
+            <QueueRow appointment={item.appointment} mutatingId={mutating} onAction={onRowAction} />
+          </AnimatedEntrance>
+        );
+    }
+  };
 
   return (
     <GlassScreen>
@@ -385,8 +480,10 @@ export default function StaffTodayScreen() {
           </GlassCard>
         ) : (
           <FlatList
-            data={queueRows}
-            keyExtractor={(item) => item.id}
+            data={items}
+            keyExtractor={(item) =>
+              item.kind === 'header' ? `header:${item.id}` : `${item.kind}:${item.appointment.id}`
+            }
             renderItem={renderItem}
             testID="today-queue-list"
             refreshing={queue.refreshing}
@@ -397,48 +494,11 @@ export default function StaffTodayScreen() {
             contentContainerStyle={styles.listContent}
             ListHeaderComponent={
               <View style={styles.headerStack}>
-                {/* -- PENDING section (Phase 11 B3) — ABOVE the queue ---------- */}
-                {queue.pending.length > 0 ? (
-                  <GlassCard padded style={styles.card}>
-                    <Text style={styles.pendingSectionTitle}>
-                      Awaiting confirmation ({queue.pending.length})
-                    </Text>
-                    {queue.pending.map((item, index) => (
-                      <AnimatedEntrance key={item.id} index={index}>
-                        <PendingRow
-                          appointment={item}
-                          onConfirm={() => void onConfirmPending(item)}
-                          onReject={() => openReject(item)}
-                        />
-                      </AnimatedEntrance>
-                    ))}
-                  </GlassCard>
-                ) : null}
-                {/* -- UPCOMING pending (mobilefix1 FIX B) — FUTURE-date bookings
-                      awaiting confirmation, adjacent to the card above so a
-                      booking on ANY horizon date is discoverable without
-                      hunting the date strip. Zero rows → zero visual noise. */}
-                {queue.upcomingPending.length > 0 ? (
-                  <GlassCard padded style={styles.card}>
-                    <Text
-                      style={styles.pendingSectionTitle}
-                      accessibilityLabel={`Awaiting confirmation, upcoming bookings: ${queue.upcomingPending.length}`}
-                    >
-                      Awaiting confirmation — upcoming ({queue.upcomingPending.length})
-                    </Text>
-                    {queue.upcomingPending.map((row, index) => (
-                      <AnimatedEntrance key={row.appointment.id} index={index}>
-                        <PendingRow
-                          appointment={row.appointment}
-                          forDate={row.date}
-                          onConfirm={() => void onConfirmPending(row.appointment)}
-                          onReject={() => openReject(row.appointment)}
-                        />
-                      </AnimatedEntrance>
-                    ))}
-                  </GlassCard>
-                ) : null}
                 {/* -- identity + availability ---------------------------------- */}
+                {/* (mobilefix2 FIX-C: the pending/upcoming cards MOVED into the
+                    unified list below — patients live with patients; this
+                    header stack keeps only the CONTEXT cards: identity, date
+                    strip, counts, actions.) */}
                 <GlassCard padded style={styles.card}>
                   <View style={styles.identityRow}>
                     <View style={styles.identityText}>
@@ -752,69 +812,125 @@ export default function StaffTodayScreen() {
 }
 
 // ---------------------------------------------------------------------------
-// Pending row (Phase 11 B3) — the manual-confirmation inbox
+// Section header (mobilefix2 FIX-C) — the unified list's section dividers
+// ---------------------------------------------------------------------------
+
+function SectionHeader({
+  label,
+  count,
+  pending,
+}: {
+  label: string;
+  count?: number;
+  /** Pending sections use the pending tint; the queue header uses the
+   * primary text color (mirrors the old card titles' two styles). */
+  pending: boolean;
+}) {
+  return (
+    <Text
+      style={pending ? styles.pendingSectionTitle : styles.queueSectionTitle}
+      accessibilityLabel={count !== undefined ? `${label}: ${count}` : label}
+    >
+      {count !== undefined ? `${label} (${count})` : label}
+    </Text>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Pending row (Phase 11 B3; mobilefix2 FIX-C tap-to-reveal) — the
+// manual-confirmation inbox, IN the patient list
 // ---------------------------------------------------------------------------
 
 function PendingRow({
   appointment,
   forDate,
+  expanded,
+  busy,
+  onToggle,
   onConfirm,
   onReject,
 }: {
   appointment: StaffQueueAppointment;
   /** mobilefix1 FIX B: the booking's IST date ('YYYY-MM-DD') — present ONLY on
-   * upcoming (future-date) rows; the selected-date card omits it. */
+   * upcoming (future-date) rows; the selected-date section omits it. */
   forDate?: string;
+  /** mobilefix2 FIX-C: tap-to-reveal — the actions render only when the row
+   * is expanded (compact otherwise; the whole row is the toggle). */
+  expanded: boolean;
+  /** mutatingId-style busy: disables the revealed actions while a confirm
+   * mutation for THIS row is in flight (double-tap guard). */
+  busy: boolean;
+  onToggle: () => void;
   onConfirm: () => void;
   onReject: () => void;
 }) {
   const bookedAt = istTimeOfISO(appointment.createdAt);
   const forDateLabel = forDate ? formatDateISO(forDate) : null;
   return (
-    <GlassCard nested style={styles.pendingRow}>
-      <View style={styles.rowTop}>
-        <View style={styles.tokenCircle}>
-          <Text style={styles.tokenNum}>#{appointment.queueNumber}</Text>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ expanded }}
+      accessibilityLabel={`${appointment.patientName}, token ${appointment.queueNumber}, awaiting confirmation`}
+      onPress={onToggle}
+      style={({ pressed }) => [pressed && styles.pendingRowPressed]}
+    >
+      <GlassCard nested style={styles.pendingRow}>
+        <View style={styles.rowTop}>
+          <View style={styles.tokenCircle}>
+            <Text style={styles.tokenNum}>#{appointment.queueNumber}</Text>
+          </View>
+          <View style={styles.rowIdentity}>
+            <View style={styles.nameRow}>
+              <Text style={styles.patientName} numberOfLines={1}>
+                {appointment.patientName}
+              </Text>
+            </View>
+            <Text style={styles.patientPhone}>{appointment.patientPhone}</Text>
+          </View>
+          <StatusChip status="PENDING" />
         </View>
-        <View style={styles.rowIdentity}>
-          <View style={styles.nameRow}>
-            <Text style={styles.patientName} numberOfLines={1}>
-              {appointment.patientName}
+        <View style={styles.metaRow}>
+          <Text style={styles.metaText}>
+            Booked {bookedAt ? `${bookedAt} IST` : 'earlier'} · awaiting confirmation
+          </Text>
+          <View style={styles.tapHint}>
+            <Ionicons
+              name={expanded ? 'chevron-up-outline' : 'chevron-down-outline'}
+              size={14}
+              color={colors.text.secondary}
+            />
+            <Text style={styles.tapHintText}>Tap to confirm</Text>
+          </View>
+        </View>
+        {forDateLabel ? (
+          <View style={styles.metaRow}>
+            <Ionicons name="calendar-outline" size={14} color={colors.text.secondary} />
+            <Text style={styles.metaText} accessibilityLabel={`Appointment date ${forDateLabel}`}>
+              For {forDateLabel}
             </Text>
           </View>
-          <Text style={styles.patientPhone}>{appointment.patientPhone}</Text>
-        </View>
-        <StatusChip status="PENDING" />
-      </View>
-      <View style={styles.metaRow}>
-        <Text style={styles.metaText}>
-          Booked {bookedAt ? `${bookedAt} IST` : 'earlier'} · awaiting confirmation
-        </Text>
-      </View>
-      {forDateLabel ? (
-        <View style={styles.metaRow}>
-          <Ionicons name="calendar-outline" size={14} color={colors.text.secondary} />
-          <Text style={styles.metaText} accessibilityLabel={`Appointment date ${forDateLabel}`}>
-            For {forDateLabel}
-          </Text>
-        </View>
-      ) : null}
-      <View style={styles.rowActions}>
-        <PrimaryButton
-          label="Confirm"
-          icon="checkmark-circle-outline"
-          onPress={onConfirm}
-          style={styles.pendingConfirmBtn}
-        />
-        <GlassButton
-          label="Reject"
-          icon="close-circle-outline"
-          tone="destructive"
-          onPress={onReject}
-          style={styles.rowBtn}
-        />
-      </View>
-    </GlassCard>
+        ) : null}
+        {expanded ? (
+          <View style={styles.rowActions}>
+            <PrimaryButton
+              label="Confirm"
+              icon="checkmark-circle-outline"
+              disabled={busy}
+              onPress={onConfirm}
+              style={styles.pendingConfirmBtn}
+            />
+            <GlassButton
+              label="Reject"
+              icon="close-circle-outline"
+              tone="destructive"
+              disabled={busy}
+              onPress={onReject}
+              style={styles.rowBtn}
+            />
+          </View>
+        ) : null}
+      </GlassCard>
+    </Pressable>
   );
 }
 
@@ -1069,13 +1185,24 @@ const styles = StyleSheet.create({
   confirmText: { ...typography.body, color: colors.text.secondary, textAlign: 'center' },
   confirmButtons: { gap: spacing.sm },
 
-  // pending section (Phase 11 B3)
+  // pending section (Phase 11 B3; mobilefix2 FIX-C: in-list sections)
   pendingSectionTitle: {
     ...typography.h3,
     color: colors.status.PENDING.fg,
   },
+  queueSectionTitle: { ...typography.h3, color: colors.text.primary },
   pendingRow: { gap: spacing.sm },
   pendingConfirmBtn: { flex: 1 },
+  // tap-to-reveal affordance + press feedback (0.6 = the file's established
+  // pressed-opacity literal, same value as notesButtonPressed)
+  tapHint: {
+    marginLeft: 'auto',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  tapHintText: { ...typography.micro, color: colors.text.secondary },
+  pendingRowPressed: { opacity: 0.6 },
 
   // walk-in modal
   walkInDate: { ...typography.caption, color: colors.text.secondary, textAlign: 'center' },

@@ -1,4 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
+import { AppState } from 'react-native';
 import { fetchTodayQueue, confirmAppointment, rejectAppointment } from '@/lib/staff';
 import { ApiError } from '@/lib/errors';
 import { addDaysISO, istTodayISO } from '@/lib/time';
@@ -28,6 +29,15 @@ jest.mock('@/lib/staff', () => ({
   confirmAppointment: jest.fn(),
   rejectAppointment: jest.fn(),
 }));
+
+// mobilefix2 P2: the @react-native/jest-preset already swaps AppState for a
+// mock (addEventListener = tracked jest.fn); its `currentState` is a bare
+// jest.fn though — the hook expects a status string, so each test seeds
+// 'active' (the app's foreground assumption at mount). The listener is
+// invoked manually for background/active transitions.
+beforeEach(() => {
+  (AppState as { currentState: unknown }).currentState = 'active';
+});
 
 const mockedFetch = fetchTodayQueue as jest.Mock;
 const mockedConfirm = confirmAppointment as jest.Mock;
@@ -117,6 +127,15 @@ function useScopedFakeTimers() {
 async function tick() {
   await act(async () => {
     jest.advanceTimersByTime(TODAY_QUEUE_POLL_INTERVAL_MS);
+  });
+}
+
+/** Emit an AppState transition to the hook's CURRENT subscription (P2). */
+async function emitAppState(state: string) {
+  const calls = (AppState.addEventListener as jest.Mock).mock.calls;
+  const listener = calls[calls.length - 1]?.[1] as ((s: string) => void) | undefined;
+  await act(async () => {
+    listener?.(state);
   });
 }
 
@@ -603,5 +622,66 @@ describe('useTodayQueue — upcoming-pending scan (mobilefix1 FIX B)', () => {
     await act(async () => {});
     expect(callsFor(d1)).toBe(2);
     expect(result.current.upcomingPending).toHaveLength(0); // empty horizon
+  });
+});
+
+describe('useTodayQueue — foreground re-sync (mobilefix2 P2)', () => {
+  test('returning to active after background fires ONE silent refresh + rescan', async () => {
+    const [d1] = scanDates();
+    const { result } = await renderHook(() => useTodayQueue('2026-08-30', true));
+    await act(async () => {});
+    expect(callsFor('2026-08-30')).toBe(1); // initial focus fetch
+    expect(callsFor(d1)).toBe(1); // initial-focus scan
+
+    await emitAppState('background');
+    await emitAppState('active');
+    await act(async () => {});
+
+    // Exactly one silent refresh (selected date) + one rescan (horizon date).
+    expect(callsFor('2026-08-30')).toBe(2);
+    expect(callsFor(d1)).toBe(2);
+    expect(result.current.error).toBeNull();
+    expect(result.current.loading).toBe(false);
+  });
+
+  test('NO refetch when a fetch is already in flight (guard absorbs the trigger)', async () => {
+    // Every fetch hangs — the queue fetch AND the scan are in flight.
+    mockedFetch.mockImplementation(
+      () =>
+        new Promise(() => {
+          /* never resolves */
+        }),
+    );
+
+    await renderHook(() => useTodayQueue('2026-08-30', true));
+    await act(async () => {});
+    const callsBefore = mockedFetch.mock.calls.length;
+    expect(callsBefore).toBeGreaterThan(0);
+
+    await emitAppState('background');
+    await emitAppState('active');
+    await act(async () => {});
+
+    expect(mockedFetch.mock.calls.length).toBe(callsBefore); // nothing stacked
+  });
+
+  test('unfocused hook ignores the foreground transition', async () => {
+    const [d1] = scanDates();
+    const { rerender } = await renderHook(
+      ({ active }: { active: boolean }) => useTodayQueue('2026-08-30', active),
+      { initialProps: { active: false } },
+    );
+    await act(async () => {});
+    expect(mockedFetch).not.toHaveBeenCalled();
+
+    await emitAppState('background');
+    await emitAppState('active');
+    await act(async () => {});
+    expect(mockedFetch).not.toHaveBeenCalled(); // gated on focus
+
+    await rerender({ active: true });
+    await act(async () => {});
+    expect(callsFor('2026-08-30')).toBe(1);
+    expect(callsFor(d1)).toBe(1);
   });
 });

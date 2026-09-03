@@ -1,4 +1,5 @@
 import { act, renderHook } from '@testing-library/react-native';
+import { AppState } from 'react-native';
 import { fetchLiveQueue } from '@/lib/appointments';
 import { useLiveQueue, LIVE_QUEUE_POLL_INTERVAL_MS } from '../useLiveQueue';
 
@@ -16,6 +17,15 @@ import { useLiveQueue, LIVE_QUEUE_POLL_INTERVAL_MS } from '../useLiveQueue';
 jest.mock('@/lib/appointments', () => ({
   fetchLiveQueue: jest.fn(),
 }));
+
+// mobilefix2 P2: the @react-native/jest-preset already swaps AppState for a
+// mock (addEventListener = tracked jest.fn); its `currentState` is a bare
+// jest.fn though — the hook expects a status string, so each test seeds
+// 'active' (the app's foreground assumption at mount). The listener is
+// invoked manually for background/active transitions.
+beforeEach(() => {
+  (AppState as { currentState: unknown }).currentState = 'active';
+});
 
 const mockedFetch = fetchLiveQueue as jest.Mock;
 
@@ -45,6 +55,15 @@ function useScopedFakeTimers() {
 async function tick() {
   await act(async () => {
     jest.advanceTimersByTime(LIVE_QUEUE_POLL_INTERVAL_MS);
+  });
+}
+
+/** Emit an AppState transition to the hook's CURRENT subscription (P2). */
+async function emitAppState(state: string) {
+  const calls = (AppState.addEventListener as jest.Mock).mock.calls;
+  const listener = calls[calls.length - 1]?.[1] as ((s: string) => void) | undefined;
+  await act(async () => {
+    listener?.(state);
   });
 }
 
@@ -202,5 +221,58 @@ describe('useLiveQueue — resilience', () => {
 
     expect(result.current.data?.my).toBeNull();
     expect(result.current.error).toBeNull(); // anonymous NEVER errors
+  });
+});
+
+describe('useLiveQueue — foreground re-sync (mobilefix2 P2)', () => {
+  test('returning to active after background fires ONE silent refetch', async () => {
+    const { result } = await renderHook(() => useLiveQueue('sch1', '2026-08-31', true));
+    await act(async () => {});
+    expect(mockedFetch).toHaveBeenCalledTimes(1); // initial focus fetch
+
+    await emitAppState('background');
+    await emitAppState('active');
+    await act(async () => {});
+
+    expect(mockedFetch).toHaveBeenCalledTimes(2); // exactly one silent refetch
+    expect(result.current.error).toBeNull();
+    expect(result.current.loading).toBe(false);
+  });
+
+  test('NO refetch when a fetch is already in flight (guard absorbs the trigger)', async () => {
+    mockedFetch.mockImplementation(
+      () =>
+        new Promise(() => {
+          /* never resolves */
+        }),
+    );
+
+    await renderHook(() => useLiveQueue('sch1', '2026-08-31', true));
+    await act(async () => {}); // the initial fetch hangs — in flight
+    expect(mockedFetch).toHaveBeenCalledTimes(1);
+
+    await emitAppState('background');
+    await emitAppState('active');
+    await act(async () => {});
+
+    expect(mockedFetch).toHaveBeenCalledTimes(1); // nothing stacked
+  });
+
+  test('unfocused hook ignores the foreground transition', async () => {
+    const { rerender } = await renderHook(
+      ({ active }: { active: boolean }) => useLiveQueue('sch1', '2026-08-31', active),
+      { initialProps: { active: false } },
+    );
+    await act(async () => {});
+    expect(mockedFetch).not.toHaveBeenCalled();
+
+    await emitAppState('background');
+    await emitAppState('active');
+    await act(async () => {});
+    expect(mockedFetch).not.toHaveBeenCalled(); // gated on focus
+
+    await rerender({ active: true });
+    await act(async () => {});
+    expect(mockedFetch).toHaveBeenCalledTimes(1);
   });
 });
